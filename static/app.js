@@ -1,18 +1,28 @@
+    function formatearFechaDisplay(iso) {
+        if (!iso) return '';
+        const [y, m, d] = iso.split('-');
+        if (!y || !m || !d) return iso;
+        return `${d}/${m}/${y}`;
+    }
 document.addEventListener('DOMContentLoaded', () => {
     const today = new Date().toISOString().split('T')[0];
     console.log('Setting today date:', today);
     
     // Variables globales
+    // Catálogo eliminado en esta versión
     let productosPorID = {}; 
     let editIndex = null;
     let ventasCache = [];
     let lastAddedIndex = -1; // Para trackear el último elemento agregado
-    let rangosPrecios = {}; // Umbrales por grupo: { A: [0, 8000, 11600], AN: [0, 7600, 8000], ... }
+    let rangosPrecios = {}; // No se usa
 
     // ======== ELEMENTOS DOM =========
     const form = document.getElementById('ventaForm');
-    const inputID = document.getElementById('id');
-    const inputNombre = document.getElementById('nombre');
+    const inputCategoria = document.getElementById('categoria');
+    const categoriaSelect = document.getElementById('categoria');
+    const tipoPP = document.getElementById('tipoPP');
+    const tipoIND = document.getElementById('tipoIND');
+    const inputFoto = document.getElementById('fotografia');
     const inputPrecio = document.getElementById('precio');
     const inputUnidades = document.getElementById('unidades');
     const inputPrecioFinal = document.getElementById('precioFinal');
@@ -22,6 +32,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const addBtn = document.getElementById('addBtn');
     const resetBtn = document.getElementById('resetBtn');
     const exportBtn = document.getElementById('exportBtn');
+    const exportHistoryBtn = document.getElementById('exportHistoryBtn');
     const downloadLink = document.getElementById('downloadLink');
     const ventasTable = document.getElementById('ventasTable');
     const ventasBody = document.getElementById('ventasBody');
@@ -153,248 +164,93 @@ document.addEventListener('DOMContentLoaded', () => {
     form.addEventListener('submit', handleSubmit);
     addBtn.addEventListener('click', handleSubmit);
     resetBtn.addEventListener('click', resetForm);
-    exportBtn.addEventListener('click', exportarExcel);
+    if (exportBtn) exportBtn.addEventListener('click', exportarExcel);
+    if (exportHistoryBtn) {
+        exportHistoryBtn.addEventListener('click', async () => {
+            try {
+                const confirmado = await confirmarAccionJSON({
+                    titulo: 'Exportar ventas del día',
+                    mensaje: 'Esta acción moverá todas las ventas actuales al historial. ¿Deseas continuar?',
+                    confirmarTexto: 'Exportar',
+                    cancelarTexto: 'Cancelar'
+                });
+                if (!confirmado) return;
+                exportHistoryBtn.disabled = true;
+                const oldHtml = exportHistoryBtn.innerHTML;
+                exportHistoryBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Exportando...';
+
+                const res = await fetch('/api/historial/export', { method: 'POST' });
+                const data = await res.json();
+                if (!res.ok || !data.success) {
+                    throw new Error(data.mensaje || data.error || 'Error al exportar');
+                }
+                mostrarNotificacion('✅ Ventas exportadas al historial', 'success');
+                window.location.href = '/historial';
+            } catch (e) {
+                mostrarNotificacion('❌ ' + e.message, 'error');
+            } finally {
+                exportHistoryBtn.disabled = false;
+                exportHistoryBtn.innerHTML = '<i class="fas fa-file-export mr-2"></i> Exportar Ventas';
+            }
+        });
+    }
+    const fotoFileName = document.getElementById('fotoFileName');
+    if (inputFoto) {
+        inputFoto.addEventListener('change', () => {
+            const file = inputFoto.files && inputFoto.files[0];
+            if (fotoFileName) fotoFileName.textContent = file ? file.name : 'Ningún archivo seleccionado';
+        });
+    }
 
     // Recalcular Precio Final en tiempo real si no fue editado manualmente
     if (inputPrecio) inputPrecio.addEventListener('input', () => { precioFinalTouched = false; recalcularPrecioFinalSiAuto(); });
-    if (inputDescuento) inputDescuento.addEventListener('input', () => { if (!isCambio) { precioFinalTouched = false; recalcularPrecioFinalSiAuto(); } });
+    if (inputDescuento) inputDescuento.addEventListener('input', () => {
+        // Limitar en tiempo real entre 0 y 100
+        const raw = inputDescuento.value;
+        if (raw !== '') {
+            let n = parseFloat(raw);
+            if (isNaN(n)) {
+                inputDescuento.value = '';
+            } else {
+                n = Math.max(0, Math.min(100, Math.round(n)));
+                inputDescuento.value = String(n);
+            }
+        }
+        if (!isCambio) { precioFinalTouched = false; recalcularPrecioFinalSiAuto(); }
+    });
     if (inputPrecioFinal) inputPrecioFinal.addEventListener('input', () => { precioFinalTouched = true; });
 
-    // Evento para el dropdown de IDs
-    inputID.addEventListener('change', function() {
-        const selectedID = this.value;
-        if (selectedID && productosPorID[selectedID]) {
-            const productoSel = productosPorID[selectedID];
-            inputNombre.value = (productoSel && productoSel.nombre) ? productoSel.nombre : '';
-            setHelper(`✅ ID seleccionado: ${selectedID}`, true);
-            
-            // Focus en el siguiente campo (precio)
-            inputPrecio.focus();
-        } else {
-            inputNombre.value = '';
-            setHelper('Selecciona un ID válido del catálogo.', false);
-        }
-    });
+    // Catálogo eliminado: no hay dropdown de IDs
 
     // ======== CARGA INICIAL =========
     console.log('Iniciando carga inicial...');
-    cargarCatalogo().then(() => {
-            console.log('Catálogo cargado, cargando rangos...');
-            return cargarRangos();
-        }).then(() => {
-            console.log('Rangos cargados, cargando ventas...');
-            return cargarVentas();
-    }).catch(error => {
+    cargarVentas().catch(error => {
         console.error('Error en carga inicial:', error);
         mostrarNotificacion(`Error en carga inicial: ${error.message}`, 'error');
     });
 
-    // ======== CATALOGO (Sheets vía backend) =========
-    async function cargarCatalogo() {
-        try {
-            console.log('Cargando catálogo desde Google Sheets...');
-            const res = await fetch('/api/catalogo');
-            
-            if (!res.ok) {
-                const errorText = await res.text();
-                console.error('Error en la respuesta del servidor:', errorText);
-                throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-            }
-            
-            const data = await res.json();
-            console.log('Datos recibidos del servidor:', data);
-            
-            if (data.error) {
-                throw new Error(data.error);
-            }
+    async function cargarRangos() { rangosPrecios = {}; }
 
-            // Verificar que los datos tengan el formato esperado
-            if (typeof data !== 'object' || Object.keys(data).length === 0) {
-                console.warn('El catálogo está vacío o tiene un formato inesperado');
-                mostrarNotificacion('El catálogo está vacío o no tiene el formato esperado', 'warning');
-                return;
-            }
+    // calcularPlaceholderRango eliminado
 
-            productosPorID = data;
-            console.log('Catálogo cargado con éxito. Número de productos:', Object.keys(productosPorID).length);
-
-            // Llenar el dropdown de IDs
-            llenarDropdownIDs();
-            
-            return data; // Retornamos los datos para manejar la promesa
-            
-        } catch (error) {
-            console.error('Error cargando catálogo:', error);
-            mostrarNotificacion(`Error cargando catálogo: ${error.message}`, 'error');
-            throw error; // Relanzamos el error para manejarlo en la cadena de promesas
-        }
-    }
-
-    async function cargarRangos() {
-        try {
-            const res = await fetch('/api/rangos');
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const data = await res.json();
-            rangosPrecios = (data && data.rangos && typeof data.rangos === 'object') ? data.rangos : {};
-            console.log('Rangos de precios:', rangosPrecios);
-        } catch (e) {
-            console.warn('No se pudieron cargar rangos, se usará placeholder simple');
-            rangosPrecios = {};
-        }
-    }
-
-    function llenarDropdownIDs() {
-        try {
-            console.log('Llenando dropdown con productos...');
-            
-            // Limpiar opciones existentes (mantener la primera opción)
-            inputID.innerHTML = '<option value="">Selecciona un ID...</option>';
-            
-            // Verificar que hay productos
-            const ids = Object.keys(productosPorID);
-            if (ids.length === 0) {
-                console.warn('No hay productos para mostrar en el dropdown');
-                mostrarNotificacion('No se encontraron productos en el catálogo', 'warning');
-                return;
-            }
-            
-            // Ordenar los IDs de forma "natural": prefijo alfabético + número (A1, A2, ..., AN1)
-            const naturalKey = (id) => {
-                const m = String(id).toUpperCase().match(/^([A-Z]+)(\d+)$/);
-                if (m) {
-                    return { letters: m[1], number: parseInt(m[2], 10), raw: id };
-                }
-                // Fallback para IDs que no siguen el patrón
-                return { letters: String(id).toUpperCase(), number: Number.MAX_SAFE_INTEGER, raw: id };
-            };
-
-            const idsOrdenados = [...ids].sort((a, b) => {
-                const ka = naturalKey(a);
-                const kb = naturalKey(b);
-                if (ka.letters < kb.letters) return -1;
-                if (ka.letters > kb.letters) return 1;
-                if (ka.number < kb.number) return -1;
-                if (ka.number > kb.number) return 1;
-                // Si empatan, ordenar por valor crudo
-                return String(ka.raw).localeCompare(String(kb.raw));
-            });
-            
-            // Establecer un placeholder simple y fijo
-            inputPrecio.placeholder = "Ingresa el precio";
-            
-            // Agregar opciones de productos
-            idsOrdenados.forEach(id => {
-                try {
-                    const producto = productosPorID[id];
-                    const nombre = producto?.nombre || 'Sin nombre';
-                    
-                    const option = document.createElement('option');
-                    option.value = id;
-                    // Mostrar SOLO ID y nombre, sin precios ni textos extra
-                    option.textContent = `${id} - ${nombre}`;
-                    
-                    // Tooltip sin precio
-                    option.title = `ID: ${id}\nNombre: ${nombre}`;
-                    
-                    // No almacenar precio en dataset para evitar usos accidentales
-                    
-                    inputID.appendChild(option);
-                } catch (error) {
-                    console.error(`Error procesando producto con ID ${id}:`, error);
-                }
-            });
-            
-            console.log(`Dropdown llenado con ${idsOrdenados.length} productos`);
-            
-            // Configurar evento para actualizar el placeholder cuando se seleccione un ID
-            inputID.addEventListener('change', function() {
-                const selectedOption = this.options[this.selectedIndex];
-                if (selectedOption && selectedOption.value) {
-                    const producto = productosPorID[selectedOption.value];
-                    if (producto) {
-                        // Placeholder según rangos si existen
-                        const placeholderRango = calcularPlaceholderRango(selectedOption.value);
-                        inputPrecio.placeholder = placeholderRango || "Ingresa el precio";
-                        inputPrecio.value = ''; // Mantener el campo vacío siempre
-                        
-                        // Rellenar automáticamente el nombre
-                        inputNombre.value = producto.nombre || '';
-                        
-                        // Focus en el campo de precio
-                        inputPrecio.focus();
-                        
-                        setHelper(`✅ ID seleccionado: ${selectedOption.value}`, true);
-                    }
-                } else {
-                    // Restaurar el placeholder por defecto si no hay selección
-                    inputPrecio.placeholder = "Ingresa el precio";
-                    inputPrecio.value = '';
-                    inputNombre.value = '';
-                    setHelper('Selecciona un ID del catálogo', false);
-                }
-            });
-            
-        } catch (error) {
-            console.error('Error al llenar el dropdown:', error);
-            mostrarNotificacion('Error al cargar la lista de productos', 'error');
-            
-            // Establecer un placeholder por defecto en caso de error
-            inputPrecio.placeholder = "Ingresa el precio";
-        }
-    }
-
-    function calcularPlaceholderRango(idSeleccionado) {
-        // Rango por grupo: usar solo IDs con el mismo prefijo de letras
-        const parseId = (id) => {
-            const m = String(id).toUpperCase().match(/^([A-Z]+)(\d+)$/);
-            return m ? { letters: m[1], number: parseInt(m[2], 10), raw: id } : { letters: '', number: 0, raw: id };
-        };
-        const sel = parseId(idSeleccionado);
-        const umbralesGrupo = rangosPrecios[sel.letters];
-        if (!Array.isArray(umbralesGrupo) || umbralesGrupo.length < 2) {
-            // Sin rangos suficientes, no mostrar sugerencia
-            return '';
-        }
-        const options = Array.from(inputID.options).filter(o => o.value);
-        const grupoOptions = options.filter(o => parseId(o.value).letters === sel.letters);
-        const idsGrupo = grupoOptions.map(o => o.value);
-
-        // Índice dentro del grupo
-        const idx = idsGrupo.indexOf(idSeleccionado);
-        if (idx === -1) return '';
-
-        // Usar el índice del grupo para mapear umbrales del grupo
-        const lower = umbralesGrupo[Math.min(idx, umbralesGrupo.length - 1)] ?? 0;
-        const upper = umbralesGrupo[idx + 1];
-
-        const fmt = (n) => {
-            if (typeof n !== 'number' || isNaN(n)) return '-';
-            return `$${n.toLocaleString('es-CL')}`;
-        };
-
-        const left = fmt(lower);
-        const right = (typeof upper === 'number') ? fmt(upper) : '-';
-        return `Precio sugerido: ${left} a ${right}`;
-    }
-
-    function setHelper(msg, ok) {
-        const el = document.getElementById('idHelper');
-        el.textContent = msg;
-        el.className = `mt-1 text-xs ${ok ? 'text-green-600' : 'text-red-600'}`;
-    }
+    function setHelper(msg, ok) { /* sin uso */ }
 
     function resetForm() {
         form.reset();
         if (fechaField) {
             fechaField.value = today;
         }
-        inputNombre.value = '';
+        // Limpiar nuevos campos
+        if (inputCategoria) inputCategoria.value = '';
+        if (inputTipo) inputTipo.value = '';
+        if (inputFoto) inputFoto.value = '';
         if (inputDescuento) inputDescuento.value = '';
         if (inputPrecioFinal) inputPrecioFinal.value = '';
         precioFinalTouched = false;
         editIndex = null;
-        setHelper('Formulario limpiado. Selecciona un ID del catálogo.', true);
-        inputID.focus();
+        setHelper('Formulario limpiado.', true);
+        if (inputCategoria) inputCategoria.focus();
+        if (fotoFileName) fotoFileName.textContent = 'Ningún archivo seleccionado';
         // Ajustar notas según modo actual
         if (inputNotas) {
             if (isCambio) {
@@ -447,14 +303,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Obtener valores del formulario
         const fecha = document.getElementById('fecha').value;
-        const id = document.getElementById('id').value.trim().toUpperCase();
-        const nombre = document.getElementById('nombre').value.trim();
+        const categoria = categoriaSelect ? categoriaSelect.value : document.getElementById('categoria')?.value?.trim();
+        const tipo = (() => {
+            if (!categoriaSelect) return '';
+            if (categoriaSelect.value === 'Indumentaria') {
+                return (tipoIND?.value || '').trim();
+            }
+            return (tipoPP?.value || '').trim();
+        })();
         const precioValue = document.getElementById('precio').value;
         const unidadesValue = document.getElementById('unidades').value;
         const pagoElement = document.querySelector('input[name="pago"]:checked');
         const notas = document.getElementById('notas').value;
 
-        console.log('Valores del formulario:', { fecha, id, nombre, precioValue, unidadesValue, pagoElement, notas });
+        console.log('Valores del formulario:', { fecha, categoria, tipo, precioValue, unidadesValue, pagoElement, notas });
 
         // Validaciones
         if (!fecha) {
@@ -462,15 +324,10 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        if (!id) {
-            mostrarNotificacion('❌ El ID del producto es requerido', 'error');
-            inputID.focus();
-            return;
-        }
-
-        if (!(id in productosPorID)) {
-            mostrarNotificacion('❌ El ID no existe en el catálogo. Selecciona un ID válido.', 'error');
-            inputID.focus();
+        if (!categoria) { mostrarNotificacion('❌ La categoría es requerida', 'error'); inputCategoria?.focus(); return; }
+        if (!tipo) {
+            mostrarNotificacion('❌ El tipo de producto es requerido', 'error');
+            if (categoriaSelect && categoriaSelect.value === 'Indumentaria') { tipoIND?.focus(); } else { tipoPP?.focus(); }
             return;
         }
 
@@ -526,7 +383,41 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         const pago = pagoElement.value;
 
-        const venta = { fecha, id, nombre, precio, unidades, pago, notas };
+        // Subir fotografía si corresponde; si estamos editando y no hay nueva, mantener la existente
+        let fotoUrl = '';
+        try {
+            if (inputFoto && inputFoto.files && inputFoto.files[0]) {
+                // Validaciones básicas de archivo (cliente)
+                const file = inputFoto.files[0];
+                const isImage = file.type && file.type.startsWith('image/');
+                const maxBytes = 5 * 1024 * 1024; // 5MB
+                if (!isImage) {
+                    mostrarNotificacion('El archivo debe ser una imagen', 'error');
+                    return;
+                }
+                if (file.size > maxBytes) {
+                    mostrarNotificacion('La imagen supera 5MB', 'error');
+                    return;
+                }
+                const fd = new FormData();
+                fd.append('fotografia', inputFoto.files[0]);
+                const upRes = await fetch('/api/upload', { method: 'POST', body: fd });
+                const upData = await upRes.json();
+                if (upRes.ok && upData.url) {
+                    fotoUrl = upData.url;
+                } else {
+                    mostrarNotificacion('⚠️ No se pudo subir la fotografía, se guardará sin imagen', 'warning');
+                }
+            }
+            // Si no hay nueva foto y estamos editando, conservar la existente
+            if (!fotoUrl && editIndex !== null && ventasCache[editIndex] && ventasCache[editIndex].fotografia) {
+                fotoUrl = ventasCache[editIndex].fotografia;
+            }
+        } catch (e) {
+            console.warn('Error subiendo fotografía', e);
+        }
+
+        const venta = { fecha, categoria, tipo, fotografia: fotoUrl, precio, unidades, pago, notas };
         console.log('Venta a enviar:', venta);
 
         try {
@@ -572,16 +463,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 fechaField.value = today;
             }
             
-            inputNombre.value = '';
-            setHelper('✅ Venta agregada correctamente. Haz clic para seleccionar otro producto.', true);
+            if (inputCategoria) inputCategoria.value = '';
+            if (tipoPP) tipoPP.selectedIndex = 0;
+            if (tipoIND) tipoIND.value = '';
+            setHelper('✅ Venta agregada correctamente.', true);
             
             // Auto-scroll al último elemento agregado
             if (editIndex === null) {
                 setTimeout(() => scrollToLastAdded(), 300);
             }
             
-            // Focus en ID para siguiente venta
-            inputID.focus();
+            // Focus en categoría para siguiente venta
+            if (inputCategoria) inputCategoria.focus();
             
         } catch (err) {
             console.error('Error al procesar venta:', err);
@@ -617,7 +510,17 @@ document.addEventListener('DOMContentLoaded', () => {
         editIndex = index;
         const v = ventasCache[index];
         document.getElementById('fecha').value = v.fecha;
-        document.getElementById('id').value = v.id;
+        if (categoriaSelect) categoriaSelect.value = v.categoria || 'Produccion Propia';
+        actualizarUIporCategoria();
+        if (categoriaSelect && categoriaSelect.value === 'Indumentaria') {
+            if (tipoIND) tipoIND.value = v.tipo || '';
+        } else {
+            // Intentar seleccionar opción coincidente; si no, dejar en 'Otro'
+            if (tipoPP) {
+                const opts = Array.from(tipoPP.options).map(o => o.value);
+                tipoPP.value = opts.includes(v.tipo) ? v.tipo : 'Otro';
+            }
+        }
         document.getElementById('precio').value = v.precio;
         if (inputPrecioFinal) {
             inputPrecioFinal.value = v.precio; // el precio almacenado es el unitario final
@@ -626,7 +529,6 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('unidades').value = v.unidades;
         document.querySelector(`input[name="pago"][value="${v.pago}"]`).checked = true;
         document.getElementById('notas').value = v.notas;
-        document.getElementById('nombre').value = v.nombre || (productosPorID[v.id] || '');
         addBtn.innerHTML = '<i class="fas fa-save mr-2"></i> Guardar Cambios';
         document.getElementById('ventaForm').scrollIntoView({ behavior: 'smooth' });
     }
@@ -653,6 +555,20 @@ document.addEventListener('DOMContentLoaded', () => {
         if (precioFinalTouched) return; // respetar edición manual
         const val = calcularPrecioFinalUnit();
         inputPrecioFinal.value = val;
+    }
+
+    // ======== UI por Categoria (Produccion Propia vs Indumentaria) ========
+    function actualizarUIporCategoria() {
+        if (!categoriaSelect) return;
+        const isInd = categoriaSelect.value === 'Indumentaria';
+        if (tipoPP) tipoPP.classList.toggle('hidden', isInd);
+        if (tipoIND) tipoIND.classList.toggle('hidden', !isInd);
+    }
+    if (categoriaSelect) {
+        actualizarUIporCategoria();
+        categoriaSelect.addEventListener('change', () => {
+            actualizarUIporCategoria();
+        });
     }
 
     // Variables para el modal de confirmación
@@ -797,9 +713,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const row = document.createElement('tr');
             row.className = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
             row.innerHTML = `
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">${venta.fecha}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${venta.id}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700" title="${venta.nombre}">${venta.nombre || '-'}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">${formatearFechaDisplay(venta.fecha)}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${venta.categoria || '-'}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700" title="${venta.tipo}">${venta.tipo || '-'}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">${venta.fotografia ? `<img src="${venta.fotografia}" alt="foto" class="h-10 w-10 object-cover rounded">` : '-'}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">$${Number(venta.precio).toFixed(2)}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">${venta.unidades}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600">$${Number(venta.total).toFixed(2)}</td>
@@ -856,27 +773,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ======== EXPORTAR =========
-    async function exportarExcel() {
-        try {
-            const res = await fetch('/api/exportar', { method: 'POST' });
-            const data = await res.json();
-            if (!res.ok || data?.success === false) {
-                const errMsg = data?.error || data?.mensaje || data?.message || 'Error al exportar';
-                throw new Error(errMsg);
-            }
-            // Mensaje fijo solicitado por el usuario
-            mostrarNotificacion('Exportado con Éxito', 'success');
-            downloadLink.classList.remove('hidden');
-        } catch (err) {
-            mostrarNotificacion(err.message || 'Error al exportar', 'error');
-        }
-    }
+    async function exportarExcel() { mostrarNotificacion('Exportación deshabilitada', 'warning'); }
     const watermark = document.getElementById('watermark');
     function updateWatermarkVisibility() {
         if (!watermark) return;
         const doc = document.documentElement;
-        const atBottom = Math.ceil(window.innerHeight + window.scrollY) >= (doc.scrollHeight - 2);
-        watermark.style.opacity = atBottom ? '0.3' : '0';
+        const scrolledBottom = window.innerHeight + window.scrollY;
+        const thresholdPx = 120;
+        const nearBottom = Math.ceil(scrolledBottom) >= (doc.scrollHeight - thresholdPx);
+        watermark.style.opacity = nearBottom ? '0.3' : '0';
     }
     window.addEventListener('scroll', updateWatermarkVisibility, { passive: true });
     window.addEventListener('resize', updateWatermarkVisibility);

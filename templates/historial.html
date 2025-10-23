@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Historial de Ventas - MwAccesorios</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='img/favicon-32x32.png') }}">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        html { zoom: 0.9; }
+        .gradient-bg { background: linear-gradient(135deg, #f5f7fa 0%, #e4e8f0 100%); }
+        .logo-text { font-family: 'Arial', sans-serif; letter-spacing: 1px; text-shadow: 1px 1px 2px rgba(0,0,0,0.1); }
+        .input-focus:focus { box-shadow: 0 0 0 3px rgba(219, 212, 187, 0.3); border-color: #DBD4BB; }
+        .btn-hover:hover { transform: translateY(-2px); box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); }
+        .btn-active:active { transform: translateY(0); }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .primary-bg { background-color: #DBD4BB; }
+        .primary-text { color: #5a5343; }
+        .primary-border { border-color: #DBD4BB; }
+        .secondary-bg { background-color: #C7BCB5; }
+        .secondary-text { color: #5a5343; }
+        .secondary-border { border-color: #C7BCB5; }
+        .btn-primary { background-color: #DBD4BB; color: #5a5343; }
+        .btn-primary:hover { background-color: #c9c1a8; }
+        .btn-secondary { background-color: #C7BCB5; color: #5a5343; }
+        .btn-secondary:hover { background-color: #b5a9a1; }
+    </style>
+</head>
+<body class="gradient-bg min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-7xl">
+        <!-- Navegación principal -->
+        <div class="mb-6 flex items-center gap-2">
+            <a href="/" class="px-4 py-2 rounded-lg bg-gray-100 text-gray-800 text-sm font-semibold hover:bg-gray-200">Registrar Ventas</a>
+            <a href="/historial" class="px-4 py-2 rounded-lg bg-gray-900 text-white text-sm font-semibold">Historial de Ventas</a>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-lg overflow-hidden">
+            <div class="p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-xl font-semibold primary-text">Historial de Ventas</h2>
+                    <a href="/" class="px-4 py-2 btn-secondary rounded-lg text-sm font-medium hover:bg-opacity-90">
+                        <i class="fas fa-plus mr-2"></i> Registrar nuevas ventas
+                    </a>
+                </div>
+
+                <div id="historyContainer" class="space-y-3"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de confirmación (historial) -->
+    <div id="confirmModalHistory" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg p-6 max-w-sm w-full mx-4">
+            <div class="text-center">
+                <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
+                    <i class="fas fa-exclamation-triangle text-red-600 text-xl"></i>
+                </div>
+                <h3 id="confirmHistoryTitle" class="text-lg leading-6 font-medium text-gray-900 mb-2">Confirmar acción</h3>
+                <p id="confirmHistoryMsg" class="text-sm text-gray-500 mb-6">¿Deseas continuar?</p>
+                <div class="flex justify-center space-x-4">
+                    <button type="button" id="confirmHistoryCancel" class="px-4 py-2 border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500">
+                        Cancelar
+                    </button>
+                    <button type="button" id="confirmHistoryOk" class="px-4 py-2 border border-transparent rounded-md shadow-sm text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
+                        Confirmar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='notifications.js') }}"></script>
+    <script>
+    function confirmarAccionHistorial({ titulo, mensaje, confirmarTexto = 'Confirmar', cancelarTexto = 'Cancelar' }) {
+        return new Promise((resolve) => {
+            const modal = document.getElementById('confirmModalHistory');
+            const titleEl = document.getElementById('confirmHistoryTitle');
+            const msgEl = document.getElementById('confirmHistoryMsg');
+            const btnOk = document.getElementById('confirmHistoryOk');
+            const btnCancel = document.getElementById('confirmHistoryCancel');
+
+            const oldTitle = titleEl.textContent;
+            const oldMsg = msgEl.textContent;
+            const oldOk = btnOk.textContent;
+            const oldCancel = btnCancel.textContent;
+
+            titleEl.textContent = titulo;
+            msgEl.textContent = mensaje;
+            btnOk.textContent = confirmarTexto;
+            btnCancel.textContent = cancelarTexto;
+            modal.classList.remove('hidden');
+
+            const onOk = () => { cleanup(); resolve(true); };
+            const onCancel = () => { cleanup(); resolve(false); };
+            function cleanup() {
+                modal.classList.add('hidden');
+                btnOk.removeEventListener('click', onOk);
+                btnCancel.removeEventListener('click', onCancel);
+                titleEl.textContent = oldTitle;
+                msgEl.textContent = oldMsg;
+                btnOk.textContent = oldOk;
+                btnCancel.textContent = oldCancel;
+            }
+            btnOk.addEventListener('click', onOk, { once: true });
+            btnCancel.addEventListener('click', onCancel, { once: true });
+        });
+    }
+    function formatearFechaDisplay(iso) {
+        if (!iso) return '';
+        const parts = iso.split('-');
+        if (parts.length !== 3) return iso;
+        const [y, m, d] = parts;
+        return `${d}/${m}/${y}`;
+    }
+    document.addEventListener('DOMContentLoaded', async () => {
+        const container = document.getElementById('historyContainer');
+        try {
+            const res = await fetch('/api/historial');
+            const data = await res.json();
+            // data es un objeto { 'YYYY-MM-DD': [ventas...] }
+            const fechas = Object.keys(data).sort((a, b) => b.localeCompare(a));
+            if (fechas.length === 0) {
+                container.innerHTML = '<div class="text-gray-500">No hay ventas exportadas aún.</div>';
+                return;
+            }
+
+            fechas.forEach(fecha => {
+                const ventas = data[fecha] || [];
+                // Calcular total del día si hace falta
+                const totalDia = ventas.reduce((acc, v) => acc + (Number(v.total) || (Number(v.precio) * Number(v.unidades)) || 0), 0);
+
+                const group = document.createElement('div');
+                group.className = 'border border-gray-200 rounded-lg';
+                const groupId = `group-${fecha}`;
+                group.innerHTML = `
+                    <button class="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-gray-50" data-toggle>
+                        <div class="flex items-center gap-3">
+                            <i class="fas fa-chevron-right text-gray-600" data-arrow></i>
+                            <span class="font-semibold text-gray-800">${formatearFechaDisplay(fecha)}</span>
+                            <span class="text-sm text-gray-500" data-count>(${ventas.length} ventas)</span>
+                        </div>
+                        <div class="text-sm text-gray-700" data-total>Total día: $${totalDia.toFixed(2)}</div>
+                    </button>
+                    <div class="hidden" data-content>
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead class="primary-bg">
+                                    <tr>
+                                        <th class="px-6 py-3 text-center text-xs font-medium primary-text uppercase tracking-wider">Fecha</th>
+                                        <th class="px-6 py-3 text-center text-xs font-medium primary-text uppercase tracking-wider">Fotografia</th>
+                                        <th class="px-6 py-3 text-center text-xs font-medium primary-text uppercase tracking-wider">Categoria</th>
+                                        <th class="px-6 py-3 text-center text-xs font-medium primary-text uppercase tracking-wider">Tipo</th>
+                                        <th class="px-6 py-3 text-center text-xs font-medium primary-text uppercase tracking-wider">Notas</th>
+                                        <th class="px-6 py-3 text-center text-xs font-medium primary-text uppercase tracking-wider">Precio</th>
+                                        <th class="px-6 py-3 text-center text-xs font-medium primary-text uppercase tracking-wider">Unidades</th>
+                                        <th class="px-6 py-3 text-center text-xs font-medium primary-text uppercase tracking-wider">Forma de Pago</th>
+                                        <th class="px-6 py-3 text-center text-xs font-medium primary-text uppercase tracking-wider">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="bg-white divide-y divide-gray-200">
+                                    ${ventas.map((v, i) => {
+                                        const rowTotal = (Number(v.total) || (Number(v.precio) * Number(v.unidades)) || 0);
+                                        return `
+                                        <tr data-index="${i}" data-total="${rowTotal}">
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700 text-center">${formatearFechaDisplay(v.fecha) || ''}</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700 text-center">${v.fotografia ? `<a href=\"${v.fotografia}\" target=\"_blank\" rel=\"noopener\"><img src=\"${v.fotografia}\" alt=\"foto\" class=\"h-20 w-20 object-cover rounded hover:opacity-90 transition\"></a>` : '-'}</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 text-center">${v.categoria || '-'}</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700 text-center">${v.tipo || '-'}</td>
+                                            <td class="px-6 py-4 text-sm text-gray-700 max-w-xs truncate text-center" title="${v.notas || ''}">${v.notas || '-'}</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700 text-center">$${Number(v.precio).toFixed(2)}</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700 text-center">${v.unidades}</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700 text-center">${v.pago}</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700 text-center align-middle">
+                                                <button data-action=\"delete-history\" data-fecha=\"${fecha}\" data-index=\"${i}\" class=\"inline-flex items-center justify-center h-9 w-9 rounded hover:bg-red-50 text-red-600 hover:text-red-800 transition\" title=\"Eliminar\">
+                                                    <i class=\"fas fa-trash text-base\"></i>
+                                                </button>
+                                            </td>
+                                        </tr>`;
+                                    }).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(group);
+
+                const toggleBtn = group.querySelector('[data-toggle]');
+                const content = group.querySelector('[data-content]');
+                const arrow = group.querySelector('[data-arrow]');
+                // Estado inicial: cerrado (flecha a la izquierda)
+                arrow.classList.remove('fa-chevron-down');
+                arrow.classList.add('fa-chevron-right');
+
+                toggleBtn.addEventListener('click', () => {
+                    const isHidden = content.classList.contains('hidden');
+                    content.classList.toggle('hidden');
+                    arrow.classList.toggle('fa-chevron-right', !isHidden);
+                    arrow.classList.toggle('fa-chevron-down', isHidden);
+                });
+
+                // Manejo de eliminación por fila (actualiza UI sin recargar)
+                group.querySelectorAll('[data-action="delete-history"]').forEach(btn => {
+                    btn.addEventListener('click', async (e) => {
+                        e.stopPropagation();
+                        const fecha = btn.getAttribute('data-fecha');
+                        const idx = btn.getAttribute('data-index');
+                        if (!fecha || idx === null) return;
+                        const confirmado = await confirmarAccionHistorial({
+                            titulo: '¿Eliminar registro? ',
+                            mensaje: 'Esta acción no se puede deshacer.',
+                            confirmarTexto: 'Eliminar',
+                            cancelarTexto: 'Cancelar'
+                        });
+                        if (!confirmado) return;
+                        try {
+                            const res = await fetch(`/api/historial/${fecha}/${idx}`, { method: 'DELETE' });
+                            const data = await res.json();
+                            if (!res.ok || !data.success) {
+                                throw new Error(data.mensaje || data.error || 'Error al eliminar');
+                            }
+                            // Actualizar UI sin recargar
+                            const row = btn.closest('tr');
+                            const rowTotal = parseFloat(row?.dataset?.total || '0');
+                            row?.remove();
+                            // Actualizar contador
+                            const countEl = group.querySelector('[data-count]');
+                            if (countEl) {
+                                const match = countEl.textContent.match(/\((\d+)/);
+                                const current = match ? parseInt(match[1]) : ventas.length;
+                                const next = Math.max(0, current - 1);
+                                countEl.textContent = `(${next} ventas)`;
+                            }
+                            // Actualizar total del día
+                            const totalEl = group.querySelector('[data-total]');
+                            if (totalEl) {
+                                const currentText = totalEl.textContent.replace(/[^0-9.,-]/g, '').replace(',', '.');
+                                const current = parseFloat(currentText) || totalDia;
+                                const next = Math.max(0, +(current - rowTotal).toFixed(2));
+                                totalEl.textContent = `Total día: $${next.toFixed(2)}`;
+                            }
+                            // Si no quedan filas, remover el grupo
+                            const tbody = group.querySelector('tbody');
+                            if (tbody && tbody.children.length === 0) {
+                                group.remove();
+                            }
+                            mostrarNotificacion('✅ Registro eliminado', 'success');
+                        } catch (err) {
+                            mostrarNotificacion('❌ ' + err.message, 'error');
+                        }
+                    });
+                });
+            });
+        } catch (e) {
+            container.innerHTML = `<div class=\"text-red-600\">Error cargando historial</div>`;
+            if (typeof mostrarNotificacion === 'function') {
+                mostrarNotificacion('❌ Error cargando historial: ' + e.message, 'error');
+            }
+        }
+    });
+    </script>
+</body>
+</html>

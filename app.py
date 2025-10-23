@@ -1,10 +1,12 @@
 from flask import Flask, render_template, request, jsonify, send_file, abort, redirect, url_for, flash
+from werkzeug.utils import secure_filename
+import os
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from functools import wraps
 from pathlib import Path
-from services.sales_service import listar_ventas, agregar_venta, actualizar_venta, eliminar_venta, obtener_estado_sheets, limpiar_ventas
-from services.catalog_service import obtener_catalogo, obtener_rangos
-from config import GOOGLE_SHEETS_CONFIG, GOOGLE_APPS_SCRIPT
+from services.sales_service import listar_ventas, agregar_venta, actualizar_venta, eliminar_venta, limpiar_ventas, listar_historial, exportar_ventas_a_historial, eliminar_historial_item
+import cloudinary
+import cloudinary.uploader
 
 app = Flask(__name__)
 app.secret_key = 'your-secret-key-here'  # Change this to a secure secret key in production
@@ -21,8 +23,8 @@ class User(UserMixin):
 
 # Hardcoded user (in production, use a database)
 USERS = {
-    'Milostore@gmail.com': {
-        'password': 'milostore2025',
+    'MwAccesorios@gmail.com': {
+        'password': 'Mw2025',
         'id': 1
     }
 }
@@ -63,6 +65,11 @@ def logout():
 @login_required
 def index():
     return render_template("index.html")
+
+@app.route("/historial")
+@login_required
+def historial():
+    return render_template("historial.html")
 
 # API de ventas (memoria)
 @app.route("/api/ventas", methods=["GET"])
@@ -106,94 +113,93 @@ def api_eliminar_todas_las_ventas():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# Exportar a Google Sheets
+@app.route("/api/historial", methods=["GET"])
+@login_required
+def api_listar_historial():
+    return jsonify(listar_historial())
+
+@app.route("/api/historial/export", methods=["POST"])
+@login_required
+def api_exportar_historial():
+    try:
+        result = exportar_ventas_a_historial()
+        status = 200 if result.get("success") else 400
+        return jsonify(result), status
+    except Exception as e:
+        return jsonify({"success": False, "error": "UNEXPECTED", "mensaje": str(e)}), 500
+
+@app.route("/api/historial/<fecha>/<int:index>", methods=["DELETE"])
+@login_required
+def api_eliminar_historial_item(fecha: str, index: int):
+    try:
+        eliminar_historial_item(fecha, index)
+        return jsonify({"success": True, "message": "Elemento eliminado"}), 200
+    except KeyError:
+        return jsonify({"success": False, "error": "FECHA_NO_ENCONTRADA"}), 404
+    except IndexError:
+        return jsonify({"success": False, "error": "INDICE_FUERA_DE_RANGO"}), 400
+    except Exception as e:
+        return jsonify({"success": False, "error": "UNEXPECTED", "mensaje": str(e)}), 500
+
+# Upload de imágenes (Fotografia)
+@app.route("/api/upload", methods=["POST"])
+@login_required
+def api_upload():
+    try:
+        file = request.files.get('fotografia') or request.files.get('file')
+        if not file or file.filename == '':
+            return jsonify({"error": "No se recibió archivo"}), 400
+        # Verificar configuración de Cloudinary (usa CLOUDINARY_URL en entorno)
+        if not os.environ.get('CLOUDINARY_URL'):
+            return jsonify({"error": "CLOUDINARY_URL no configurado en el entorno"}), 500
+        # Subir a Cloudinary
+        result = cloudinary.uploader.upload(
+            file,
+            folder="mwaccesorios",
+            resource_type="image"
+        )
+        secure_url = result.get("secure_url")
+        if not secure_url:
+            return jsonify({"error": "Fallo al subir a Cloudinary"}), 500
+        return jsonify({"url": secure_url}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# Deshabilitado por seguridad: Exportar a Google Sheets
 @app.route("/api/exportar", methods=["POST"])
 def api_exportar():
-    """Exporta TODAS las ventas acumuladas en memoria a Google Sheets"""
-    from services.sales_service import exportar_todas_las_ventas_a_sheets
-    resultado = exportar_todas_las_ventas_a_sheets()
-    return jsonify(resultado), 200
+    return jsonify({"success": False, "error": "EXPORT_DISABLED", "mensaje": "Exportación deshabilitada por seguridad"}), 403
 
-# Diagnóstico: exporta una fila de prueba vía Apps Script / Sheets
 @app.route("/api/exportar_prueba", methods=["POST"])
 def api_exportar_prueba():
-    try:
-        from services.sales_service import _get_sheets_writer
-        writer = _get_sheets_writer()
-        if writer is None:
-            return jsonify({"success": False, "error": "NO_WRITER"}), 500
-        from datetime import datetime
-        venta_demo = {
-            "fecha": datetime.now().strftime("%Y-%m-%d"),
-            "id": "TEST001",
-            "nombre": "Prueba Exportación",
-            "precio": 1234.56,
-            "unidades": 2,
-            "pago": "Efectivo",
-            "notas": "Fila de prueba"
-        }
-        res = writer.agregar_multiples_ventas_a_sheets([venta_demo])
-        return jsonify({"success": True, "resultado": res}), 200
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+    return jsonify({"success": False, "error": "EXPORT_DISABLED"}), 403
 
 # Redirigir a Google Sheets
 @app.route("/download/sheets", methods=["GET"])
 def download_sheets():
-    # Redirigir a la hoja específica de Google Sheets
-    return redirect("https://docs.google.com/spreadsheets/d/1QG8a6yHmad5sFpVcKhC3l0oEAcjJftmHV2KAF56bkkM/edit?gid=561161202#gid=561161202")
+    abort(404)
 
 @app.route("/api/catalogo", methods=["GET"])
 def api_catalogo():
-    try:
-        return jsonify(obtener_catalogo())
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    return jsonify({"success": False, "error": "CATALOG_DISABLED"}), 403
 
 @app.route("/api/rangos", methods=["GET"])
 def api_rangos():
-    try:
-        return jsonify({"rangos": obtener_rangos()})
-    except Exception as e:
-        return jsonify({"rangos": {}}), 200
+    return jsonify({"success": False, "rangos": {}}), 200
 
 @app.route("/api/sheets/status", methods=["GET"])
 def api_sheets_status():
-    try:
-        return jsonify(obtener_estado_sheets())
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    return jsonify({"success": False, "error": "SHEETS_DISABLED"}), 403
 
 # Endpoint de verificación rápida
 @app.route("/test_sheets", methods=["GET"])
 def test_sheets():
-    try:
-        from services.sales_service import _get_sheets_writer
-        writer = _get_sheets_writer()
-        if writer is None:
-            return jsonify({"status": "error", "error": "No hay cliente de Google Sheets"}), 500
-        # Listar títulos de hojas disponibles
-        if hasattr(writer, 'spreadsheet'):
-            sheets = [ws.title for ws in writer.spreadsheet.worksheets()]
-            return jsonify({"status": "ok", "mode": "sheets_api", "sheets": sheets})
-        else:
-            return jsonify({"status": "ok", "mode": "apps_script"})
-    except Exception as e:
-        return jsonify({"status": "error", "error": str(e)}), 500
+    return jsonify({"status": "disabled"}), 403
 
 # Endpoint de verificación de Apps Script
 @app.route("/test_gas", methods=["GET"])
 def test_gas():
-    try:
-        from services.apps_script_writer import AppsScriptWriter
-        gas_url = (GOOGLE_APPS_SCRIPT.get("GAS_URL") or "").strip()
-        if not gas_url:
-            return jsonify({"status": "error", "error": "GAS_URL no configurado"}), 400
-        writer = AppsScriptWriter()
-        estado = writer.obtener_estado_gas()
-        return jsonify(estado), 200
-    except Exception as e:
-        return jsonify({"status": "error", "error": str(e)}), 500
+    return jsonify({"status": "disabled"}), 403
 
 if __name__ == "__main__":
     app.run(debug=True)
