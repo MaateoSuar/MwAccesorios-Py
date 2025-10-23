@@ -142,17 +142,12 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateSidebarClock() {
         if (!sidebarClock) return;
         const now = new Date();
-        let fecha = now.toLocaleDateString('es-AR', { weekday: 'long', day: '2-digit', month: 'long' });
-        // Capitalizar solo la PRIMERA letra del día
-        const comaIdx = fecha.indexOf(',');
-        if (comaIdx !== -1) {
-            const dia = fecha.slice(0, comaIdx);
-            const diaCap = dia.charAt(0).toUpperCase() + dia.slice(1);
-            const resto = fecha.slice(comaIdx);
-            fecha = `${diaCap}${resto}`;
-        } else if (fecha.length > 0) {
-            fecha = fecha.charAt(0).toUpperCase() + fecha.slice(1);
-        }
+        const weekday = now.toLocaleDateString('es-AR', { weekday: 'long' });
+        const day = now.toLocaleDateString('es-AR', { day: '2-digit' });
+        const month = now.toLocaleDateString('es-AR', { month: 'long' });
+        const diaCap = weekday.charAt(0).toUpperCase() + weekday.slice(1);
+        const mesCap = month.charAt(0).toUpperCase() + month.slice(1);
+        const fecha = `${diaCap}, ${day} de ${mesCap}`;
         const hora = now.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
         if (sidebarClockDate) sidebarClockDate.textContent = fecha;
         if (sidebarClockTime) sidebarClockTime.textContent = hora;
@@ -198,7 +193,18 @@ document.addEventListener('DOMContentLoaded', () => {
     if (inputFoto) {
         inputFoto.addEventListener('change', () => {
             const file = inputFoto.files && inputFoto.files[0];
-            if (fotoFileName) fotoFileName.textContent = file ? file.name : 'Ningún archivo seleccionado';
+            if (fotoFileName) {
+                fotoFileName.textContent = file ? file.name : 'Ningún archivo seleccionado';
+                const cls = ['underline', 'text-green-700', 'decoration-green-500', 'decoration-2', 'underline-offset-2'];
+                if (file) {
+                    fotoFileName.classList.add(...cls);
+                    if (typeof mostrarNotificacion === 'function') {
+                        mostrarNotificacion('Imagen Subida', 'success');
+                    }
+                } else {
+                    fotoFileName.classList.remove(...cls);
+                }
+            }
         });
     }
 
@@ -260,6 +266,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 inputNotas.value = '';
                 inputNotas.placeholder = NOTAS_PLACEHOLDER_VENTA;
             }
+        }
+        if (fotoFileName) {
+            fotoFileName.classList.remove('underline', 'text-green-700', 'decoration-green-500', 'decoration-2', 'underline-offset-2');
         }
     }
 

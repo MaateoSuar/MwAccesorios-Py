@@ -27,8 +27,51 @@
         .btn-secondary:hover { background-color: #b5a9a1; }
     </style>
 </head>
-<body class="gradient-bg min-h-screen">
-    <div class="container mx-auto px-4 py-8 max-w-7xl">
+<body class="gradient-bg min-h-screen flex">
+    <!-- Panel de Estadísticas (barra lateral) -->
+    <div class="w-72 bg-white shadow-lg p-6 hidden md:block">
+        <div class="mb-8 text-center">
+            <div class="mx-auto mb-4 flex items-center justify-center">
+                <div class="w-60 h-28 md:w-64 md:h-32 rounded-full border-4 primary-border overflow-hidden bg-white">
+                    <img src="{{ url_for('static', filename='img/MiloStore.jpeg') }}" alt="MwAccesorios Logo" class="w-full h-full object-cover">
+                </div>
+            </div>
+            <h1 class="logo-text text-2xl font-bold primary-text">MWAccesorios</h1>
+            <p class="text-gray-600 text-sm">Sistema de registro de ventas</p>
+            <!-- Reloj en tiempo real -->
+            <div class="mt-3">
+                <div id="sidebarClock" class="flex items-center justify-center gap-3 primary-bg rounded-lg px-3 py-2 shadow-sm">
+                    <div class="flex flex-col items-center text-center leading-tight w-full">
+                        <span class="text-base primary-text font-semibold" id="sidebarClockDate"></span>
+                        <span class="text-[26px] font-semibold primary-text tracking-wide" id="sidebarClockTime"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="space-y-6">
+            <div class="secondary-bg p-4 rounded-lg">
+                <h3 class="text-sm font-medium secondary-text mb-1">Ventas Hoy</h3>
+                <p class="text-2xl font-bold primary-text" id="ventasHoy">0</p>
+            </div>
+            <div class="primary-bg p-4 rounded-lg">
+                <h3 class="text-sm font-medium primary-text mb-1">Ingresos Totales</h3>
+                <p class="text-2xl font-bold secondary-text" id="ingresosTotales">$0.00</p>
+            </div>
+            <div class="secondary-bg p-4 rounded-lg">
+                <h3 class="text-sm font-medium secondary-text mb-1">Promedio por Venta</h3>
+                <p class="text-2xl font-bold primary-text" id="promedioVenta">$0.00</p>
+            </div>
+            <!-- Botón de Cerrar Sesión -->
+            <div class="mt-8">
+                <a href="/logout" class="w-full flex items-center justify-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">
+                    <i class="fas fa-sign-out-alt mr-2"></i> Cerrar Sesión
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="flex-1 w-full px-4 py-8">
         <!-- Navegación principal -->
         <div class="mb-6 flex items-center gap-2">
             <a href="/" class="px-4 py-2 rounded-lg bg-gray-100 text-gray-800 text-sm font-semibold hover:bg-gray-200">Registrar Ventas</a>
@@ -66,6 +109,19 @@
                         Confirmar
                     </button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de imagen (lightbox) -->
+    <div id="imageModal" class="hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
+        <div class="relative max-w-4xl w-full mx-4">
+            <div class="relative inline-block mx-auto">
+                <img id="imageModalImg" src="" alt="foto" class="max-h-[80vh] w-auto rounded-lg shadow-lg bg-white" />
+                <button id="imageModalClose" type="button" class="absolute -top-3 -right-3 h-10 w-10 rounded-full bg-white text-gray-700 shadow hover:bg-gray-100 focus:outline-none">
+                    <span class="sr-only">Cerrar</span>
+                    ✕
+                </button>
             </div>
         </div>
     </div>
@@ -113,143 +169,275 @@
         const [y, m, d] = parts;
         return `${d}/${m}/${y}`;
     }
+    function formatearMesDisplay(ym) {
+        if (!ym || ym.length < 7) return ym || '';
+        const [y, m] = ym.split('-');
+        const fecha = new Date(parseInt(y, 10), parseInt(m, 10) - 1, 1);
+        const mes = fecha.toLocaleDateString('es-AR', { month: 'long' });
+        const mesCap = mes.charAt(0).toUpperCase() + mes.slice(1);
+        return `${mesCap} ${y}`;
+    }
+
+    // Manejo del modal de imagen
+    function abrirModalImagen(url) {
+        const modal = document.getElementById('imageModal');
+        const img = document.getElementById('imageModalImg');
+        if (!modal || !img) return;
+        img.src = url || '';
+        modal.classList.remove('hidden');
+    }
+    function cerrarModalImagen() {
+        const modal = document.getElementById('imageModal');
+        const img = document.getElementById('imageModalImg');
+        if (!modal || !img) return;
+        img.src = '';
+        modal.classList.add('hidden');
+    }
+
+    // ======== RELOJ LATERAL (historial) ========
+    function updateSidebarClockHist() {
+        const sidebarClock = document.getElementById('sidebarClock');
+        if (!sidebarClock) return;
+        const sidebarClockDate = document.getElementById('sidebarClockDate');
+        const sidebarClockTime = document.getElementById('sidebarClockTime');
+        const now = new Date();
+        const weekday = now.toLocaleDateString('es-AR', { weekday: 'long' });
+        const day = now.toLocaleDateString('es-AR', { day: '2-digit' });
+        let month = now.toLocaleDateString('es-AR', { month: 'long' });
+        const diaCap = weekday.charAt(0).toUpperCase() + weekday.slice(1);
+        const mesCap = month.charAt(0).toUpperCase() + month.slice(1);
+        const fecha = `${diaCap}, ${day} de ${mesCap}`;
+        const hora = now.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+        if (sidebarClockDate) sidebarClockDate.textContent = fecha;
+        if (sidebarClockTime) sidebarClockTime.textContent = hora;
+    }
+
+    // ======== ESTADÍSTICAS LATERAL (historial) ========
+    async function cargarEstadisticasHist() {
+        try {
+            const res = await fetch('/api/ventas');
+            const ventas = await res.json();
+            const hoy = new Date().toISOString().split('T')[0];
+            const ventasHoyArr = Array.isArray(ventas) ? ventas.filter(v => v.fecha === hoy) : [];
+            const cant = ventasHoyArr.length;
+            const total = ventasHoyArr.reduce((acc, v) => acc + (Number(v.total) || 0), 0);
+            const promedio = cant > 0 ? total / cant : 0;
+            const elCant = document.getElementById('ventasHoy');
+            const elTotal = document.getElementById('ingresosTotales');
+            const elProm = document.getElementById('promedioVenta');
+            if (elCant) elCant.textContent = String(cant);
+            if (elTotal) elTotal.textContent = `$${total.toFixed(2)}`;
+            if (elProm) elProm.textContent = `$${promedio.toFixed(2)}`;
+        } catch (e) {
+            // Silencioso en historial
+        }
+    }
+
     document.addEventListener('DOMContentLoaded', async () => {
         const container = document.getElementById('historyContainer');
+
+        // Eventos globales del modal de imagen
+        const imageModal = document.getElementById('imageModal');
+        const imageModalClose = document.getElementById('imageModalClose');
+        if (imageModal) {
+            imageModal.addEventListener('click', (e) => {
+                if (e.target === imageModal) {
+                    cerrarModalImagen();
+                }
+            });
+        }
+        if (imageModalClose) {
+            imageModalClose.addEventListener('click', cerrarModalImagen);
+        }
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') cerrarModalImagen();
+        });
+
+        // Iniciar reloj del sidebar
+        updateSidebarClockHist();
+        setInterval(updateSidebarClockHist, 1000);
+        // Cargar y refrescar estadísticas del sidebar
+        cargarEstadisticasHist();
+        setInterval(cargarEstadisticasHist, 60000);
+
         try {
             const res = await fetch('/api/historial');
             const data = await res.json();
-            // data es un objeto { 'YYYY-MM-DD': [ventas...] }
             const fechas = Object.keys(data).sort((a, b) => b.localeCompare(a));
             if (fechas.length === 0) {
                 container.innerHTML = '<div class="text-gray-500">No hay ventas exportadas aún.</div>';
                 return;
             }
 
-            fechas.forEach(fecha => {
-                const ventas = data[fecha] || [];
-                // Calcular total del día si hace falta
-                const totalDia = ventas.reduce((acc, v) => acc + (Number(v.total) || (Number(v.precio) * Number(v.unidades)) || 0), 0);
-
-                const group = document.createElement('div');
-                group.className = 'border border-gray-200 rounded-lg';
-                const groupId = `group-${fecha}`;
-                group.innerHTML = `
-                    <button class="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-gray-50" data-toggle>
-                        <div class="flex items-center gap-3">
-                            <i class="fas fa-chevron-right text-gray-600" data-arrow></i>
-                            <span class="font-semibold text-gray-800">${formatearFechaDisplay(fecha)}</span>
-                            <span class="text-sm text-gray-500" data-count>(${ventas.length} ventas)</span>
-                        </div>
-                        <div class="text-sm text-gray-700" data-total>Total día: $${totalDia.toFixed(2)}</div>
-                    </button>
-                    <div class="hidden" data-content>
-                        <div class="overflow-x-auto">
-                            <table class="min-w-full divide-y divide-gray-200">
-                                <thead class="primary-bg">
-                                    <tr>
-                                        <th class="px-6 py-3 text-center text-xs font-medium primary-text uppercase tracking-wider">Fecha</th>
-                                        <th class="px-6 py-3 text-center text-xs font-medium primary-text uppercase tracking-wider">Fotografia</th>
-                                        <th class="px-6 py-3 text-center text-xs font-medium primary-text uppercase tracking-wider">Categoria</th>
-                                        <th class="px-6 py-3 text-center text-xs font-medium primary-text uppercase tracking-wider">Tipo</th>
-                                        <th class="px-6 py-3 text-center text-xs font-medium primary-text uppercase tracking-wider">Notas</th>
-                                        <th class="px-6 py-3 text-center text-xs font-medium primary-text uppercase tracking-wider">Precio</th>
-                                        <th class="px-6 py-3 text-center text-xs font-medium primary-text uppercase tracking-wider">Unidades</th>
-                                        <th class="px-6 py-3 text-center text-xs font-medium primary-text uppercase tracking-wider">Forma de Pago</th>
-                                        <th class="px-6 py-3 text-center text-xs font-medium primary-text uppercase tracking-wider">Acciones</th>
-                                    </tr>
-                                </thead>
-                                <tbody class="bg-white divide-y divide-gray-200">
-                                    ${ventas.map((v, i) => {
-                                        const rowTotal = (Number(v.total) || (Number(v.precio) * Number(v.unidades)) || 0);
-                                        return `
-                                        <tr data-index="${i}" data-total="${rowTotal}">
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700 text-center">${formatearFechaDisplay(v.fecha) || ''}</td>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700 text-center">${v.fotografia ? `<a href=\"${v.fotografia}\" target=\"_blank\" rel=\"noopener\"><img src=\"${v.fotografia}\" alt=\"foto\" class=\"h-20 w-20 object-cover rounded hover:opacity-90 transition\"></a>` : '-'}</td>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 text-center">${v.categoria || '-'}</td>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700 text-center">${v.tipo || '-'}</td>
-                                            <td class="px-6 py-4 text-sm text-gray-700 max-w-xs truncate text-center" title="${v.notas || ''}">${v.notas || '-'}</td>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700 text-center">$${Number(v.precio).toFixed(2)}</td>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700 text-center">${v.unidades}</td>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700 text-center">${v.pago}</td>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700 text-center align-middle">
-                                                <button data-action=\"delete-history\" data-fecha=\"${fecha}\" data-index=\"${i}\" class=\"inline-flex items-center justify-center h-9 w-9 rounded hover:bg-red-50 text-red-600 hover:text-red-800 transition\" title=\"Eliminar\">
-                                                    <i class=\"fas fa-trash text-base\"></i>
-                                                </button>
-                                            </td>
-                                        </tr>`;
-                                    }).join('')}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                `;
-                container.appendChild(group);
-
-                const toggleBtn = group.querySelector('[data-toggle]');
-                const content = group.querySelector('[data-content]');
-                const arrow = group.querySelector('[data-arrow]');
-                // Estado inicial: cerrado (flecha a la izquierda)
-                arrow.classList.remove('fa-chevron-down');
-                arrow.classList.add('fa-chevron-right');
-
-                toggleBtn.addEventListener('click', () => {
-                    const isHidden = content.classList.contains('hidden');
-                    content.classList.toggle('hidden');
-                    arrow.classList.toggle('fa-chevron-right', !isHidden);
-                    arrow.classList.toggle('fa-chevron-down', isHidden);
+            // Agrupar por meses
+            const meses = {};
+            fechas.forEach(f => {
+                const ym = f.substring(0, 7);
+                if (!meses[ym]) meses[ym] = [];
+                meses[ym].push(f);
+            });
+            const monthKeys = Object.keys(meses).sort((a, b) => b.localeCompare(a));
+            monthKeys.forEach(ym => {
+                // Total del mes
+                let monthTotal = 0;
+                (meses[ym] || []).forEach(d => {
+                    const ventasDia = data[d] || [];
+                    monthTotal += ventasDia.reduce((acc, v) => acc + (Number(v.total) || (Number(v.precio) * Number(v.unidades)) || 0), 0);
                 });
 
-                // Manejo de eliminación por fila (actualiza UI sin recargar)
-                group.querySelectorAll('[data-action="delete-history"]').forEach(btn => {
-                    btn.addEventListener('click', async (e) => {
-                        e.stopPropagation();
-                        const fecha = btn.getAttribute('data-fecha');
-                        const idx = btn.getAttribute('data-index');
-                        if (!fecha || idx === null) return;
-                        const confirmado = await confirmarAccionHistorial({
-                            titulo: '¿Eliminar registro? ',
-                            mensaje: 'Esta acción no se puede deshacer.',
-                            confirmarTexto: 'Eliminar',
-                            cancelarTexto: 'Cancelar'
+                const monthSection = document.createElement('div');
+                monthSection.className = 'mb-6';
+                monthSection.setAttribute('data-month-section', ym);
+                monthSection.innerHTML = `
+                    <button class="w-full flex items-center justify-between px-4 py-2 text-left bg-gray-100 rounded hover:bg-gray-200" data-month-toggle>
+                        <div class="flex items-center gap-3">
+                            <i class="fas fa-chevron-right text-gray-600" data-month-arrow></i>
+                            <h3 class="text-lg font-semibold primary-text">${formatearMesDisplay(ym)}</h3>
+                        </div>
+                        <div class="text-sm text-gray-700 font-bold" data-month-total>Total del Mes: $${monthTotal.toFixed(2)}</div>
+                    </button>
+                    <div data-month-content class="mt-3 space-y-3 hidden"></div>
+                `;
+                const monthContent = monthSection.querySelector('[data-month-content]');
+                const monthToggle = monthSection.querySelector('[data-month-toggle]');
+                const monthArrow = monthSection.querySelector('[data-month-arrow]');
+                monthArrow.classList.remove('fa-chevron-down');
+                monthArrow.classList.add('fa-chevron-right');
+                monthToggle.addEventListener('click', () => {
+                    const isHidden = monthContent.classList.contains('hidden');
+                    monthContent.classList.toggle('hidden');
+                    monthArrow.classList.toggle('fa-chevron-right', !isHidden);
+                    monthArrow.classList.toggle('fa-chevron-down', isHidden);
+                });
+
+                const dias = meses[ym].sort((a, b) => b.localeCompare(a));
+                dias.forEach(fecha => {
+                    const ventas = data[fecha] || [];
+                    const totalDia = ventas.reduce((acc, v) => acc + (Number(v.total) || (Number(v.precio) * Number(v.unidades)) || 0), 0);
+
+                    const group = document.createElement('div');
+                    group.className = 'border border-gray-200 rounded-lg';
+                    group.innerHTML = `
+                        <button class="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-gray-50" data-toggle>
+                            <div class="flex items-center gap-3">
+                                <i class="fas fa-chevron-right text-gray-600" data-arrow></i>
+                                <span class="font-semibold text-gray-800">${formatearFechaDisplay(fecha)}</span>
+                                <span class="text-sm text-gray-500" data-count>(${ventas.length} ventas)</span>
+                            </div>
+                            <div class="text-sm text-gray-700" data-total>Total día: $${totalDia.toFixed(2)}</div>
+                        </button>
+                        <div class="hidden" data-content>
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full divide-y divide-gray-200">
+                                    <thead class="primary-bg">
+                                        <tr>
+                                            <th class="px-6 py-3 text-center text-xs font-medium primary-text uppercase tracking-wider">Fecha</th>
+                                            <th class="px-6 py-3 text-center text-xs font-medium primary-text uppercase tracking-wider">Fotografia</th>
+                                            <th class="px-6 py-3 text-center text-xs font-medium primary-text uppercase tracking-wider">Categoria</th>
+                                            <th class="px-6 py-3 text-center text-xs font-medium primary-text uppercase tracking-wider">Tipo</th>
+                                            <th class="px-6 py-3 text-center text-xs font-medium primary-text uppercase tracking-wider">Notas</th>
+                                            <th class="px-6 py-3 text-center text-xs font-medium primary-text uppercase tracking-wider">Precio</th>
+                                            <th class="px-6 py-3 text-center text-xs font-medium primary-text uppercase tracking-wider">Unidades</th>
+                                            <th class="px-6 py-3 text-center text-xs font-medium primary-text uppercase tracking-wider">Forma de Pago</th>
+                                            <th class="px-6 py-3 text-center text-xs font-medium primary-text uppercase tracking-wider">Acciones</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="bg-white divide-y divide-gray-200">
+                                        ${ventas.map((v, i) => {
+                                            const rowTotal = (Number(v.total) || (Number(v.precio) * Number(v.unidades)) || 0);
+                                            return `
+                                            <tr data-index="${i}" data-total="${rowTotal}">
+                                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700 text-center">${formatearFechaDisplay(v.fecha) || ''}</td>
+                                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700 text-center">${v.fotografia ? `<button type=\"button\" data-photo-url=\"${v.fotografia}\" class=\"inline-block rounded focus:outline-none\"><img src=\"${v.fotografia}\" alt=\"foto\" class=\"h-28 w-28 object-cover rounded hover:opacity-90 transition\"></button>` : '-'}</td>
+                                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 text-center">${v.categoria || '-'}</td>
+                                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700 text-center">${v.tipo || '-'}</td>
+                                                <td class="px-6 py-4 text-sm text-gray-700 max-w-xs truncate text-center" title="${v.notas || ''}">${v.notas || '-'}</td>
+                                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700 text-center">$${Number(v.precio).toFixed(2)}</td>
+                                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700 text-center">${v.unidades}</td>
+                                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700 text-center">${v.pago}</td>
+                                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700 text-center align-middle">
+                                                    <button data-action=\"delete-history\" data-fecha=\"${fecha}\" data-index=\"${i}\" class=\"inline-flex items-center justify-center h-9 w-9 rounded hover:bg-red-50 text-red-600 hover:text-red-800 transition\" title=\"Eliminar\">
+                                                        <i class=\"fas fa-trash text-base\"></i>
+                                                    </button>
+                                                </td>
+                                            </tr>`;
+                                        }).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    `;
+                    monthContent.appendChild(group);
+
+                    const toggleBtn = group.querySelector('[data-toggle]');
+                    const content = group.querySelector('[data-content]');
+                    const arrow = group.querySelector('[data-arrow]');
+                    arrow.classList.remove('fa-chevron-down');
+                    arrow.classList.add('fa-chevron-right');
+                    toggleBtn.addEventListener('click', () => {
+                        const isHidden = content.classList.contains('hidden');
+                        content.classList.toggle('hidden');
+                        arrow.classList.toggle('fa-chevron-right', !isHidden);
+                        arrow.classList.toggle('fa-chevron-down', isHidden);
+                    });
+
+                    group.querySelectorAll('[data-action=\"delete-history\"]').forEach(btn => {
+                        btn.addEventListener('click', async (e) => {
+                            e.stopPropagation();
+                            const fecha = btn.getAttribute('data-fecha');
+                            const idx = btn.getAttribute('data-index');
+                            if (!fecha || idx === null) return;
+                            const confirmado = await confirmarAccionHistorial({
+                                titulo: '¿Eliminar registro? ',
+                                mensaje: 'Esta acción no se puede deshacer.',
+                                confirmarTexto: 'Eliminar',
+                                cancelarTexto: 'Cancelar'
+                            });
+                            if (!confirmado) return;
+                            try {
+                                const res = await fetch(`/api/historial/${fecha}/${idx}`, { method: 'DELETE' });
+                                const data = await res.json();
+                                if (!res.ok || !data.success) {
+                                    throw new Error(data.mensaje || data.error || 'Error al eliminar');
+                                }
+                                const row = btn.closest('tr');
+                                const rowTotal = parseFloat(row?.dataset?.total || '0');
+                                row?.remove();
+                                const countEl = group.querySelector('[data-count]');
+                                if (countEl) {
+                                    const match = countEl.textContent.match(/\((\d+)/);
+                                    const current = match ? parseInt(match[1]) : ventas.length;
+                                    const next = Math.max(0, current - 1);
+                                    countEl.textContent = `(${next} ventas)`;
+                                }
+                                const totalEl = group.querySelector('[data-total]');
+                                if (totalEl) {
+                                    const currentText = totalEl.textContent.replace(/[^0-9.,-]/g, '').replace(',', '.');
+                                    const current = parseFloat(currentText) || totalDia;
+                                    const next = Math.max(0, +(current - rowTotal).toFixed(2));
+                                    totalEl.textContent = `Total día: $${next.toFixed(2)}`;
+                                }
+                                // Actualizar total del mes
+                                const monthContainer = group.closest('[data-month-section]');
+                                const monthTotalEl = monthContainer ? monthContainer.querySelector('[data-month-total]') : null;
+                                if (monthTotalEl) {
+                                    const currentText = monthTotalEl.textContent.replace(/[^0-9.,-]/g, '').replace(',', '.');
+                                    const currentMonth = parseFloat(currentText) || monthTotal;
+                                    const nextMonth = Math.max(0, +(currentMonth - rowTotal).toFixed(2));
+                                    monthTotalEl.textContent = `Total del Mes: $${nextMonth.toFixed(2)}`;
+                                }
+                                const tbody = group.querySelector('tbody');
+                                if (tbody && tbody.children.length === 0) {
+                                    group.remove();
+                                }
+                                mostrarNotificacion('✅ Registro eliminado', 'success');
+                            } catch (err) {
+                                mostrarNotificacion('❌ ' + err.message, 'error');
+                            }
                         });
-                        if (!confirmado) return;
-                        try {
-                            const res = await fetch(`/api/historial/${fecha}/${idx}`, { method: 'DELETE' });
-                            const data = await res.json();
-                            if (!res.ok || !data.success) {
-                                throw new Error(data.mensaje || data.error || 'Error al eliminar');
-                            }
-                            // Actualizar UI sin recargar
-                            const row = btn.closest('tr');
-                            const rowTotal = parseFloat(row?.dataset?.total || '0');
-                            row?.remove();
-                            // Actualizar contador
-                            const countEl = group.querySelector('[data-count]');
-                            if (countEl) {
-                                const match = countEl.textContent.match(/\((\d+)/);
-                                const current = match ? parseInt(match[1]) : ventas.length;
-                                const next = Math.max(0, current - 1);
-                                countEl.textContent = `(${next} ventas)`;
-                            }
-                            // Actualizar total del día
-                            const totalEl = group.querySelector('[data-total]');
-                            if (totalEl) {
-                                const currentText = totalEl.textContent.replace(/[^0-9.,-]/g, '').replace(',', '.');
-                                const current = parseFloat(currentText) || totalDia;
-                                const next = Math.max(0, +(current - rowTotal).toFixed(2));
-                                totalEl.textContent = `Total día: $${next.toFixed(2)}`;
-                            }
-                            // Si no quedan filas, remover el grupo
-                            const tbody = group.querySelector('tbody');
-                            if (tbody && tbody.children.length === 0) {
-                                group.remove();
-                            }
-                            mostrarNotificacion('✅ Registro eliminado', 'success');
-                        } catch (err) {
-                            mostrarNotificacion('❌ ' + err.message, 'error');
-                        }
                     });
                 });
+                container.appendChild(monthSection);
             });
         } catch (e) {
             container.innerHTML = `<div class=\"text-red-600\">Error cargando historial</div>`;
@@ -257,7 +445,16 @@
                 mostrarNotificacion('❌ Error cargando historial: ' + e.message, 'error');
             }
         }
+
+        // Delegación: abrir modal al clickear miniaturas
+        container.addEventListener('click', (e) => {
+            const btn = e.target.closest('[data-photo-url]');
+            if (!btn) return;
+            e.preventDefault();
+            const url = btn.getAttribute('data-photo-url');
+            if (url) abrirModalImagen(url);
+        });
     });
     </script>
-</body>
-</html>
+    </body>
+    </html>
