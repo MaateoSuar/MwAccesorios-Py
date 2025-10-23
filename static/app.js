@@ -86,14 +86,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     inputPrecioFinal.value = '';
                 }
             }
-            // Layout: precio más grande y unidades a la derecha
-            if (precioGroup) {
-                precioGroup.classList.remove('md:col-span-2');
-                precioGroup.classList.add('md:col-span-3');
-            }
-            if (unidadesGroup) {
-                unidadesGroup.classList.add('md:justify-self-end');
-            }
             // Título del formulario
             if (formTitle) formTitle.textContent = 'Cambio de Venta';
         } else {
@@ -113,14 +105,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (precioFinalGroup) precioFinalGroup.classList.remove('hidden');
             // Recalcular precio final a partir de descuento si no fue tocado manual
             recalcularPrecioFinalSiAuto();
-            // Layout: precio normal y unidades sin alineación forzada
-            if (precioGroup) {
-                precioGroup.classList.remove('md:col-span-3');
-                precioGroup.classList.add('md:col-span-2');
-            }
-            if (unidadesGroup) {
-                unidadesGroup.classList.remove('md:justify-self-end');
-            }
             // Título del formulario
             if (formTitle) formTitle.textContent = 'Registro de Venta';
         }
