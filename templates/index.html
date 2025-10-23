@@ -335,7 +335,7 @@
     <script src="{{ url_for('static', filename='notifications.js') }}"></script>
     <script src="{{ url_for('static', filename='app.js') }}"></script>
     <!-- Marca de agua fija: pegar justo antes de </body> -->
-    <div id="watermark" style="position:fixed; bottom:1rem; left:0; width:18rem; pointer-events:none; user-select:none; z-index:1000; opacity:0; transition:opacity 500ms;">
+    <div id="watermark" class="hidden md:block" style="position:fixed; bottom:1rem; left:0; width:18rem; pointer-events:none; user-select:none; z-index:1000; opacity:0; transition:opacity 500ms;">
         <img src="{{ url_for('static', filename='img/Agua.jpeg') }}" alt="Marca de agua" style="width:100%; height:auto;">
     </div>
     <script>
