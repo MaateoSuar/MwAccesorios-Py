@@ -5,8 +5,7 @@ from flask_login import LoginManager, UserMixin, login_user, login_required, log
 from functools import wraps
 from pathlib import Path
 from services.sales_service import listar_ventas, agregar_venta, actualizar_venta, eliminar_venta, limpiar_ventas, listar_historial, exportar_ventas_a_historial, eliminar_historial_item
-import cloudinary
-import cloudinary.uploader
+import importlib
 
 app = Flask(__name__)
 app.secret_key = 'your-secret-key-here'  # Change this to a secure secret key in production
@@ -146,6 +145,8 @@ def api_eliminar_historial_item(fecha: str, index: int):
 @login_required
 def api_upload():
     try:
+        cloudinary = importlib.import_module('cloudinary')
+        uploader = importlib.import_module('cloudinary.uploader')
         file = request.files.get('fotografia') or request.files.get('file')
         if not file or file.filename == '':
             return jsonify({"error": "No se recibió archivo"}), 400
@@ -153,7 +154,7 @@ def api_upload():
         if not os.environ.get('CLOUDINARY_URL'):
             return jsonify({"error": "CLOUDINARY_URL no configurado en el entorno"}), 500
         # Subir a Cloudinary
-        result = cloudinary.uploader.upload(
+        result = uploader.upload(
             file,
             folder="mwaccesorios",
             resource_type="image"

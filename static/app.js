@@ -50,6 +50,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const tabCambio = document.getElementById('tabCambio');
     const ventaFormCard = document.getElementById('ventaFormCard');
     const formTitle = document.getElementById('formTitle');
+    const sidebarPanel = document.getElementById('sidebarPanel');
+    const openSidebarBtn = document.getElementById('openSidebarBtn');
+    const closeSidebarBtn = document.getElementById('closeSidebarBtn');
+    const sidebarOverlay = document.getElementById('sidebarOverlay');
 
     // Estado de pestaña actual
     let isCambio = false;
@@ -121,6 +125,22 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     // Aplicar estado inicial de pestañas/placeholder/borde
     aplicarModo();
+
+    function openSidebar() {
+        if (!sidebarPanel) return;
+        sidebarPanel.classList.remove('hidden');
+        sidebarPanel.classList.remove('-translate-x-full');
+        if (sidebarOverlay) sidebarOverlay.classList.remove('hidden');
+    }
+    function closeSidebar() {
+        if (!sidebarPanel) return;
+        sidebarPanel.classList.add('-translate-x-full');
+        if (sidebarOverlay) sidebarOverlay.classList.add('hidden');
+    }
+    if (openSidebarBtn) openSidebarBtn.addEventListener('click', openSidebar);
+    if (closeSidebarBtn) closeSidebarBtn.addEventListener('click', closeSidebar);
+    if (sidebarOverlay) sidebarOverlay.addEventListener('click', closeSidebar);
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSidebar(); });
 
     // ======== RELOJ LATERAL ========
     function updateSidebarClock() {
@@ -706,14 +726,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const row = document.createElement('tr');
             row.className = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
             row.innerHTML = `
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">${formatearFechaDisplay(venta.fecha)}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${venta.categoria || '-'}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700" title="${venta.tipo}">${venta.tipo || '-'}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">${venta.fotografia ? `<img src="${venta.fotografia}" alt="foto" class="h-10 w-10 object-cover rounded">` : '-'}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">$${Number(venta.precio).toFixed(2)}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">${venta.unidades}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600">$${Number(venta.total).toFixed(2)}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                <td class="px-3 md:px-6 py-3 whitespace-nowrap text-xs md:text-sm text-gray-700">${formatearFechaDisplay(venta.fecha)}</td>
+                <td class="px-3 md:px-6 py-3 whitespace-nowrap text-xs md:text-sm font-medium text-gray-900">${venta.categoria || '-'}</td>
+                <td class="px-3 md:px-6 py-3 whitespace-nowrap text-xs md:text-sm text-gray-700" title="${venta.tipo}">${venta.tipo || '-'}</td>
+                <td class="px-3 md:px-6 py-3 whitespace-nowrap text-xs md:text-sm text-gray-700">${venta.fotografia ? `<img src="${venta.fotografia}" alt="foto" class="h-8 w-8 md:h-10 md:w-10 object-cover rounded">` : '-'}</td>
+                <td class="px-3 md:px-6 py-3 whitespace-nowrap text-xs md:text-sm text-gray-700">$${Number(venta.precio).toFixed(2)}</td>
+                <td class="px-3 md:px-6 py-3 whitespace-nowrap text-xs md:text-sm text-gray-700">${venta.unidades}</td>
+                <td class="px-3 md:px-6 py-3 whitespace-nowrap text-xs md:text-sm font-medium text-green-600">$${Number(venta.total).toFixed(2)}</td>
+                <td class="px-3 md:px-6 py-3 whitespace-nowrap text-xs md:text-sm text-gray-700">
                     <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full
                         ${venta.pago === 'Efectivo' ? 'bg-green-100 text-green-800' :
                           venta.pago === 'Debito' ? 'bg-blue-100 text-blue-800' :
@@ -723,8 +743,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         ${venta.pago}
                     </span>
                 </td>
-                <td class="px-6 py-4 text-sm text-gray-700 max-w-xs truncate" title="${venta.notas}">${venta.notas || '-'}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                <td class="px-3 md:px-6 py-3 text-xs md:text-sm text-gray-700 max-w-[8rem] md:max-w-xs truncate" title="${venta.notas}">${venta.notas || '-'}</td>
+                <td class="px-3 md:px-6 py-3 whitespace-nowrap text-right text-xs md:text-sm font-medium space-x-2">
                     <button data-action="editar" data-index="${index}" class="text-blue-600 hover:text-blue-900">
                         <i class="fas fa-edit"></i>
                     </button>

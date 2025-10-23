@@ -1,9 +1,6 @@
 from datetime import datetime
 import json
 from pathlib import Path
-from .google_sheets_writer import GoogleSheetsWriter
-from .apps_script_writer import AppsScriptWriter
-from config import GOOGLE_APPS_SCRIPT
 
 DATA_DIR = Path("data")
 DATA_DIR.mkdir(exist_ok=True)
@@ -64,6 +61,8 @@ def _get_sheets_writer():
             # Forzar uso de API directa de Google Sheets para mayor confiabilidad ahora
             # Si deseas volver a Apps Script, comenta la línea siguiente y descomenta la lógica por GAS_URL.
             print("[INFO] Usando GoogleSheetsWriter (API directa), ignorando GAS_URL temporalmente")
+            # Import perezoso para evitar cargar config/credenciales al arranque
+            from .google_sheets_writer import GoogleSheetsWriter
             _sheets_writer = GoogleSheetsWriter()
             # -- Modo anterior por GAS_URL --
             # gas_url = (GOOGLE_APPS_SCRIPT.get("GAS_URL") or "").strip()

@@ -34,15 +34,16 @@
 </head>
 <body class="gradient-bg min-h-screen flex">
     <!-- Panel de Estadísticas -->
-    <div class="w-72 bg-white shadow-lg p-6 hidden md:block">
+    <div id="sidebarPanel" class="w-72 bg-white shadow-lg p-4 md:p-6 pb-8 hidden md:block md:relative md:translate-x-0 fixed inset-y-0 left-0 z-50 transform -translate-x-full transition-transform duration-200 overflow-y-auto md:overflow-visible h-screen md:h-auto">
         <div class="mb-8 text-center">
             <div class="mx-auto mb-4 flex items-center justify-center">
-                <div class="w-60 h-28 md:w-64 md:h-32 rounded-full border-4 primary-border overflow-hidden bg-white">
+                <div class="w-40 h-20 md:w-64 md:h-32 rounded-full border-4 primary-border overflow-hidden bg-white">
                     <img src="{{ url_for('static', filename='img/MiloStore.jpeg') }}" alt="MwAccesorios Logo" class="w-full h-full object-cover">
                 </div>
             </div>
-            <h1 class="logo-text text-2xl font-bold primary-text">MWAccesorios</h1>
-            <p class="text-gray-600 text-sm">Sistema de registro de ventas</p>
+            <h1 class="logo-text text-xl md:text-2xl font-bold primary-text">MWAccesorios</h1>
+            <p class="text-gray-600 text-xs md:text-sm">Sistema de registro de ventas</p>
+            <button id="closeSidebarBtn" type="button" class="md:hidden mt-3 px-3 py-1 rounded bg-gray-100 text-gray-800 text-sm border border-gray-200">Cerrar</button>
             <!-- Reloj en tiempo real -->
             <div class="mt-3">
                 <div id="sidebarClock" class="flex items-center justify-center gap-3 primary-bg rounded-lg px-3 py-2 shadow-sm">
@@ -78,9 +79,15 @@
         </div>
     </div>
 
+    <!-- Overlay para sidebar (móvil/tablet) -->
+    <div id="sidebarOverlay" class="fixed inset-0 bg-black/40 z-40 hidden md:hidden"></div>
+
     <div class="flex-1 container mx-auto px-4 py-8 max-w-7xl">
         <!-- Navegación principal -->
         <div class="mb-6 flex items-center gap-2">
+            <button id="openSidebarBtn" type="button" class="md:hidden px-3 py-2 rounded-lg bg-gray-100 text-gray-800 text-sm font-semibold hover:bg-gray-200">
+                <i class="fas fa-bars mr-2"></i> Menú
+            </button>
             <a href="/" class="px-4 py-2 rounded-lg bg-gray-900 text-white text-sm font-semibold">Registrar Ventas</a>
             <a href="/historial" class="px-4 py-2 rounded-lg bg-gray-100 text-gray-800 text-sm font-semibold hover:bg-gray-200">Historial de Ventas</a>
         </div>
@@ -327,9 +334,27 @@
     <!-- JS -->
     <script src="{{ url_for('static', filename='notifications.js') }}"></script>
     <script src="{{ url_for('static', filename='app.js') }}"></script>
-    <!-- Marca de agua fija: fondo inferior izquierdo, no se mueve con el scroll -->
-    <div id="watermark" class="fixed bottom-4 left-0 w-72 pointer-events-none select-none z-10 transition-opacity duration-500" style="opacity: 0;">
-        <img src="{{ url_for('static', filename='img/Agua.jpeg') }}" alt="Marca de agua" class="w-full h-auto">
+    <!-- Marca de agua fija: pegar justo antes de </body> -->
+    <div id="watermark" style="position:fixed; bottom:1rem; left:0; width:18rem; pointer-events:none; user-select:none; z-index:1000; opacity:0; transition:opacity 500ms;">
+        <img src="{{ url_for('static', filename='img/Agua.jpeg') }}" alt="Marca de agua" style="width:100%; height:auto;">
     </div>
-</body>
+    <script>
+    (function () {
+      var watermark = document.getElementById('watermark');
+      function updateWatermarkVisibility() {
+        if (!watermark) return;
+        var doc = document.documentElement;
+        var body = document.body;
+        var fullHeight = Math.max(doc.scrollHeight, body.scrollHeight, doc.offsetHeight, body.offsetHeight, doc.clientHeight);
+        var viewportBottom = Math.ceil((window.pageYOffset || window.scrollY || doc.scrollTop || 0) + window.innerHeight);
+        var atBottom = viewportBottom >= (fullHeight - 100);
+        watermark.style.opacity = atBottom ? '0.3' : '0';
+      }
+      window.addEventListener('scroll', updateWatermarkVisibility, { passive: true });
+      window.addEventListener('resize', updateWatermarkVisibility);
+      window.addEventListener('load', updateWatermarkVisibility);
+      updateWatermarkVisibility();
+    })();
+    </script>
+  </body>
 </html>

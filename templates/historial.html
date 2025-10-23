@@ -29,15 +29,16 @@
 </head>
 <body class="gradient-bg min-h-screen flex">
     <!-- Panel de Estadísticas (barra lateral) -->
-    <div class="w-72 bg-white shadow-lg p-6 hidden md:block">
+    <div id="sidebarPanelHist" class="w-[85vw] max-w-xs md:w-72 bg-white shadow-lg p-4 md:p-6 overflow-y-auto hidden md:block md:relative md:translate-x-0 fixed inset-y-0 left-0 z-50 transform -translate-x-full transition-transform duration-200">
         <div class="mb-8 text-center">
             <div class="mx-auto mb-4 flex items-center justify-center">
-                <div class="w-60 h-28 md:w-64 md:h-32 rounded-full border-4 primary-border overflow-hidden bg-white">
+                <div class="w-40 h-20 md:w-64 md:h-32 rounded-full border-4 primary-border overflow-hidden bg-white">
                     <img src="{{ url_for('static', filename='img/MiloStore.jpeg') }}" alt="MwAccesorios Logo" class="w-full h-full object-cover">
                 </div>
             </div>
-            <h1 class="logo-text text-2xl font-bold primary-text">MWAccesorios</h1>
-            <p class="text-gray-600 text-sm">Sistema de registro de ventas</p>
+            <h1 class="logo-text text-xl md:text-2xl font-bold primary-text">MWAccesorios</h1>
+            <p class="text-gray-600 text-xs md:text-sm">Sistema de registro de ventas</p>
+            <button id="closeSidebarBtnHist" type="button" class="md:hidden mt-3 px-3 py-1 rounded bg-gray-100 text-gray-800 text-sm border border-gray-200">Cerrar</button>
             <!-- Reloj en tiempo real -->
             <div class="mt-3">
                 <div id="sidebarClock" class="flex items-center justify-center gap-3 primary-bg rounded-lg px-3 py-2 shadow-sm">
@@ -71,9 +72,14 @@
         </div>
     </div>
 
-    <div class="flex-1 w-full px-4 py-8">
+    <div id="sidebarOverlayHist" class="fixed inset-0 bg-black/40 z-40 hidden md:hidden"></div>
+
+    <div class="flex-1 w-full px-3 py-6 md:px-6 md:py-8">
         <!-- Navegación principal -->
         <div class="mb-6 flex items-center gap-2">
+            <button id="openSidebarBtnHist" type="button" class="md:hidden px-3 py-2 rounded-lg bg-gray-100 text-gray-800 text-sm font-semibold hover:bg-gray-200">
+                <i class="fas fa-bars mr-2"></i> Menú
+            </button>
             <a href="/" class="px-4 py-2 rounded-lg bg-gray-100 text-gray-800 text-sm font-semibold hover:bg-gray-200">Registrar Ventas</a>
             <a href="/historial" class="px-4 py-2 rounded-lg bg-gray-900 text-white text-sm font-semibold">Historial de Ventas</a>
         </div>
@@ -81,8 +87,8 @@
         <div class="bg-white rounded-xl shadow-lg overflow-hidden">
             <div class="p-6">
                 <div class="flex items-center justify-between mb-4">
-                    <h2 class="text-xl font-semibold primary-text">Historial de Ventas</h2>
-                    <a href="/" class="px-4 py-2 btn-secondary rounded-lg text-sm font-medium hover:bg-opacity-90">
+                    <h2 class="text-lg md:text-xl font-semibold primary-text">Historial de Ventas</h2>
+                    <a href="/" class="px-3 py-2 md:px-4 md:py-2 btn-secondary rounded-lg text-sm font-medium hover:bg-opacity-90">
                         <i class="fas fa-plus mr-2"></i> Registrar nuevas ventas
                     </a>
                 </div>
@@ -235,6 +241,26 @@
 
     document.addEventListener('DOMContentLoaded', async () => {
         const container = document.getElementById('historyContainer');
+        // Sidebar responsive (historial)
+        const sidebarPanelHist = document.getElementById('sidebarPanelHist');
+        const openSidebarBtnHist = document.getElementById('openSidebarBtnHist');
+        const closeSidebarBtnHist = document.getElementById('closeSidebarBtnHist');
+        const sidebarOverlayHist = document.getElementById('sidebarOverlayHist');
+        function openSidebarHist() {
+            if (!sidebarPanelHist) return;
+            sidebarPanelHist.classList.remove('hidden');
+            sidebarPanelHist.classList.remove('-translate-x-full');
+            if (sidebarOverlayHist) sidebarOverlayHist.classList.remove('hidden');
+        }
+        function closeSidebarHist() {
+            if (!sidebarPanelHist) return;
+            sidebarPanelHist.classList.add('-translate-x-full');
+            if (sidebarOverlayHist) sidebarOverlayHist.classList.add('hidden');
+        }
+        if (openSidebarBtnHist) openSidebarBtnHist.addEventListener('click', openSidebarHist);
+        if (closeSidebarBtnHist) closeSidebarBtnHist.addEventListener('click', closeSidebarHist);
+        if (sidebarOverlayHist) sidebarOverlayHist.addEventListener('click', closeSidebarHist);
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSidebarHist(); });
 
         // Eventos globales del modal de imagen
         const imageModal = document.getElementById('imageModal');
@@ -289,12 +315,12 @@
                 monthSection.className = 'mb-6';
                 monthSection.setAttribute('data-month-section', ym);
                 monthSection.innerHTML = `
-                    <button class="w-full flex items-center justify-between px-4 py-2 text-left bg-gray-100 rounded hover:bg-gray-200" data-month-toggle>
-                        <div class="flex items-center gap-3">
+                    <button class="w-full flex items-center justify-between px-3 md:px-4 py-2 text-left bg-gray-100 rounded hover:bg-gray-200" data-month-toggle>
+                        <div class="flex items-center gap-2 md:gap-3">
                             <i class="fas fa-chevron-right text-gray-600" data-month-arrow></i>
-                            <h3 class="text-lg font-semibold primary-text">${formatearMesDisplay(ym)}</h3>
+                            <h3 class="text-base md:text-lg font-semibold primary-text">${formatearMesDisplay(ym)}</h3>
                         </div>
-                        <div class="text-sm text-gray-700 font-bold" data-month-total>Total del Mes: $${monthTotal.toFixed(2)}</div>
+                        <div class="text-[11px] sm:text-xs md:text-sm text-gray-700 font-bold" data-month-total>Total del Mes: $${monthTotal.toFixed(2)}</div>
                     </button>
                     <div data-month-content class="mt-3 space-y-3 hidden"></div>
                 `;
@@ -318,28 +344,28 @@
                     const group = document.createElement('div');
                     group.className = 'border border-gray-200 rounded-lg';
                     group.innerHTML = `
-                        <button class="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-gray-50" data-toggle>
-                            <div class="flex items-center gap-3">
+                        <button class="w-full flex items-center justify-between px-3 md:px-4 py-3 text-left hover:bg-gray-50" data-toggle>
+                            <div class="flex items-center gap-2 md:gap-3">
                                 <i class="fas fa-chevron-right text-gray-600" data-arrow></i>
                                 <span class="font-semibold text-gray-800">${formatearFechaDisplay(fecha)}</span>
-                                <span class="text-sm text-gray-500" data-count>(${ventas.length} ventas)</span>
+                                <span class="text-[11px] sm:text-xs text-gray-500" data-count>(${ventas.length} ventas)</span>
                             </div>
-                            <div class="text-sm text-gray-700" data-total>Total día: $${totalDia.toFixed(2)}</div>
+                            <div class="text-[11px] sm:text-xs md:text-sm text-gray-700" data-total>Total día: $${totalDia.toFixed(2)}</div>
                         </button>
                         <div class="hidden" data-content>
                             <div class="overflow-x-auto">
-                                <table class="min-w-full divide-y divide-gray-200">
+                                <table class="min-w-full divide-y divide-gray-200 text-[11px] sm:text-xs md:text-sm">
                                     <thead class="primary-bg">
                                         <tr>
-                                            <th class="px-6 py-3 text-center text-xs font-medium primary-text uppercase tracking-wider">Fecha</th>
-                                            <th class="px-6 py-3 text-center text-xs font-medium primary-text uppercase tracking-wider">Fotografia</th>
-                                            <th class="px-6 py-3 text-center text-xs font-medium primary-text uppercase tracking-wider">Categoria</th>
-                                            <th class="px-6 py-3 text-center text-xs font-medium primary-text uppercase tracking-wider">Tipo</th>
-                                            <th class="px-6 py-3 text-center text-xs font-medium primary-text uppercase tracking-wider">Notas</th>
-                                            <th class="px-6 py-3 text-center text-xs font-medium primary-text uppercase tracking-wider">Precio</th>
-                                            <th class="px-6 py-3 text-center text-xs font-medium primary-text uppercase tracking-wider">Unidades</th>
-                                            <th class="px-6 py-3 text-center text-xs font-medium primary-text uppercase tracking-wider">Forma de Pago</th>
-                                            <th class="px-6 py-3 text-center text-xs font-medium primary-text uppercase tracking-wider">Acciones</th>
+                                            <th class="px-3 md:px-6 py-3 text-center text-[10px] sm:text-xs font-medium primary-text uppercase tracking-wider">Fecha</th>
+                                            <th class="px-3 md:px-6 py-3 text-center text-[10px] sm:text-xs font-medium primary-text uppercase tracking-wider">Fotografia</th>
+                                            <th class="px-3 md:px-6 py-3 text-center text-[10px] sm:text-xs font-medium primary-text uppercase tracking-wider">Categoria</th>
+                                            <th class="px-3 md:px-6 py-3 text-center text-[10px] sm:text-xs font-medium primary-text uppercase tracking-wider">Tipo</th>
+                                            <th class="px-3 md:px-6 py-3 text-center text-[10px] sm:text-xs font-medium primary-text uppercase tracking-wider">Notas</th>
+                                            <th class="px-3 md:px-6 py-3 text-center text-[10px] sm:text-xs font-medium primary-text uppercase tracking-wider">Precio</th>
+                                            <th class="px-3 md:px-6 py-3 text-center text-[10px] sm:text-xs font-medium primary-text uppercase tracking-wider">Unidades</th>
+                                            <th class="px-3 md:px-6 py-3 text-center text-[10px] sm:text-xs font-medium primary-text uppercase tracking-wider">Forma de Pago</th>
+                                            <th class="px-3 md:px-6 py-3 text-center text-[10px] sm:text-xs font-medium primary-text uppercase tracking-wider">Acciones</th>
                                         </tr>
                                     </thead>
                                     <tbody class="bg-white divide-y divide-gray-200">
@@ -347,15 +373,15 @@
                                             const rowTotal = (Number(v.total) || (Number(v.precio) * Number(v.unidades)) || 0);
                                             return `
                                             <tr data-index="${i}" data-total="${rowTotal}">
-                                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700 text-center">${formatearFechaDisplay(v.fecha) || ''}</td>
-                                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700 text-center">${v.fotografia ? `<button type=\"button\" data-photo-url=\"${v.fotografia}\" class=\"inline-block rounded focus:outline-none\"><img src=\"${v.fotografia}\" alt=\"foto\" class=\"h-28 w-28 object-cover rounded hover:opacity-90 transition\"></button>` : '-'}</td>
-                                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 text-center">${v.categoria || '-'}</td>
-                                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700 text-center">${v.tipo || '-'}</td>
-                                                <td class="px-6 py-4 text-sm text-gray-700 max-w-xs truncate text-center" title="${v.notas || ''}">${v.notas || '-'}</td>
-                                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700 text-center">$${Number(v.precio).toFixed(2)}</td>
-                                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700 text-center">${v.unidades}</td>
-                                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700 text-center">${v.pago}</td>
-                                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700 text-center align-middle">
+                                                <td class="px-3 md:px-6 py-3 whitespace-nowrap text-xs md:text-sm text-gray-700 text-center">${formatearFechaDisplay(v.fecha) || ''}</td>
+                                                <td class="px-3 md:px-6 py-3 whitespace-nowrap text-xs md:text-sm text-gray-700 text-center">${v.fotografia ? `<button type=\"button\" data-photo-url=\"${v.fotografia}\" class=\"inline-block rounded focus:outline-none\"><img src=\"${v.fotografia}\" alt=\"foto\" class=\"h-20 w-20 md:h-28 md:w-28 object-cover rounded hover:opacity-90 transition\"></button>` : '-'}</td>
+                                                <td class="px-3 md:px-6 py-3 whitespace-nowrap text-xs md:text-sm font-medium text-gray-900 text-center">${v.categoria || '-'}</td>
+                                                <td class="px-3 md:px-6 py-3 whitespace-nowrap text-xs md:text-sm text-gray-700 text-center">${v.tipo || '-'}</td>
+                                                <td class="px-3 md:px-6 py-3 text-xs md:text-sm text-gray-700 max-w-[8rem] md:max-w-xs truncate text-center" title="${v.notas || ''}">${v.notas || '-'}</td>
+                                                <td class="px-3 md:px-6 py-3 whitespace-nowrap text-xs md:text-sm text-gray-700 text-center">$${Number(v.precio).toFixed(2)}</td>
+                                                <td class="px-3 md:px-6 py-3 whitespace-nowrap text-xs md:text-sm text-gray-700 text-center">${v.unidades}</td>
+                                                <td class="px-3 md:px-6 py-3 whitespace-nowrap text-xs md:text-sm text-gray-700 text-center">${v.pago}</td>
+                                                <td class="px-3 md:px-6 py-3 whitespace-nowrap text-xs md:text-sm text-gray-700 text-center align-middle">
                                                     <button data-action=\"delete-history\" data-fecha=\"${fecha}\" data-index=\"${i}\" class=\"inline-flex items-center justify-center h-9 w-9 rounded hover:bg-red-50 text-red-600 hover:text-red-800 transition\" title=\"Eliminar\">
                                                         <i class=\"fas fa-trash text-base\"></i>
                                                     </button>
