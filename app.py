@@ -6,6 +6,8 @@ from functools import wraps
 from pathlib import Path
 from services.sales_service import listar_ventas, agregar_venta, actualizar_venta, eliminar_venta, limpiar_ventas, listar_historial, exportar_ventas_a_historial, eliminar_historial_item
 import importlib
+import threading
+import requests
 
 app = Flask(__name__)
 app.secret_key = 'your-secret-key-here'  # Change this to a secure secret key in production
@@ -80,6 +82,40 @@ def api_agregar_venta():
     data = request.get_json(force=True, silent=True) or {}
     try:
         agregar_venta(data)
+
+        def _post_to_gas(payload):
+            try:
+                gas_url = os.environ.get("GAS_WEBAPP_URL", "").strip()
+                if not gas_url:
+                    try:
+                        from config import GOOGLE_APPS_SCRIPT
+                        gas_url = (GOOGLE_APPS_SCRIPT.get("GAS_URL") or "").strip()
+                    except Exception:
+                        gas_url = ""
+                if not gas_url:
+                    return
+                headers = {"Content-Type": "application/json"}
+                body = {"action": "submit", "venta": payload}
+                requests.post(gas_url, json=body, headers=headers, timeout=5)
+            except Exception:
+                pass
+
+        venta_payload = {
+            "fecha": data.get("fecha", ""),
+            "notas": data.get("notas", ""),
+            "categoria": data.get("categoria", ""),
+            "tipo": data.get("tipo", ""),
+            # Link de Cloudinary ya viene en 'fotografia' desde /api/upload
+            "fotografia": data.get("fotografia", ""),
+            # Para Sheets:
+            # F Precio (base), G Descuento, H Precio Final (unitario)
+            "precio": data.get("precio_base", data.get("precio", 0)),
+            "descuento": data.get("descuento", ""),
+            "precioFinal": data.get("precio_final", data.get("precio", 0)),
+            "unidades": data.get("unidades", 0),
+            "pago": data.get("pago", ""),
+        }
+        threading.Thread(target=_post_to_gas, args=(venta_payload,), daemon=True).start()
         return jsonify({"message": "Venta agregada"}), 201
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
@@ -126,6 +162,7 @@ def api_exportar_historial():
         return jsonify(result), status
     except Exception as e:
         return jsonify({"success": False, "error": "UNEXPECTED", "mensaje": str(e)}), 500
+
 
 @app.route("/api/historial/<fecha>/<int:index>", methods=["DELETE"])
 @login_required

@@ -27,11 +27,10 @@ class AppsScriptWriter:
         self.data_dir = Path("data")
         self.data_dir.mkdir(exist_ok=True)
 
-        # Headers esperados (A..L)
+        # Headers esperados (nuevos campos)
         self.expected_headers = [
-            "Fecha", "Notas", "ID", "Nombre del Elemento", "Precio",
-            "Unidades", "Precio Unitario", "Costo U", "Tipo",
-            "Forma de Pago", "Costo Total", "Margen"
+            "Fecha", "Notas", "Categoria", "Tipo de Producto", "Link de Fotografia",
+            "Precio", "Descuento", "Precio Final", "Unidades", "Forma de pago"
         ]
 
     def normalizar_fila_datos(self, fila_datos):
@@ -45,32 +44,46 @@ class AppsScriptWriter:
         # precio ingresado es unitario
         precio_unitario = round(float(venta["precio"]), 2)
         unidades = int(venta["unidades"])  # asegurar entero
-        precio_total = round(precio_unitario * unidades, 2)
-        margen = precio_total
+        
+        # Calcular precio final
+        precio_final = round(precio_unitario * unidades, 2)
+        
+        # Calcular descuento (por defecto 0)
+        descuento = venta.get("descuento", 0)
+        if descuento > 0:
+            precio_final = round(precio_final * (1 - descuento/100), 2)
 
         fecha_obj = datetime.fromisoformat(str(venta["fecha"]))
+        
+        # Obtener categoría y link de foto
+        categoria = venta.get("categoria", "General")
+        link_foto = venta.get("link_foto", venta.get("fotografia", ""))
+        
         fila = [
-            fecha_obj.strftime("%d/%m"),            # A: Fecha
+            fecha_obj.strftime("%d/%m/%Y"),          # A: Fecha
             str(venta.get("notas", "")),          # B: Notas
-            str(venta["id"]).upper(),              # C: ID
-            str(venta["nombre"]),                  # D: Nombre
-            float(precio_total),                     # E: Precio (total)
-            int(unidades),                           # F: Unidades
-            float(precio_unitario),                  # G: Precio Unitario
-            "Sin stock",                            # H: Costo U (placeholder)
-            "",                                     # I: Tipo
-            str(venta.get("pago", "Otro")),       # J: Forma de pago
-            float(precio_total),                     # K: Costo Total
-            float(margen)                            # L: Margen
+            categoria,                             # C: Categoria
+            str(venta.get("tipo", venta.get("nombre", ""))),  # D: Tipo de Producto
+            link_foto,                             # E: Link de Fotografia
+            float(precio_unitario),                # F: Precio (unitario)
+            float(descuento),                      # G: Descuento
+            float(precio_final),                   # H: Precio Final
+            int(unidades),                         # I: Unidades
+            str(venta.get("pago", "Efectivo"))    # J: Forma de pago
         ]
         return self.normalizar_fila_datos(fila)
 
     def _post_gas(self, payload: dict, timeout: int = None):
+        import urllib.request
+        import urllib.error
+        import json
+        
         body = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(self.gas_url, data=body, method="POST")
         req.add_header("Content-Type", "application/json")
         if self.api_key:
             req.add_header("X-API-Key", self.api_key)
+            
         try:
             with urllib.request.urlopen(req, timeout=timeout or GOOGLE_APPS_SCRIPT.get("TIMEOUT", 15)) as resp:
                 data = resp.read().decode("utf-8")
@@ -113,8 +126,14 @@ class AppsScriptWriter:
         if not ventas:
             return {"success": False, "error": "NO_HAY_VENTAS", "mensaje": "No hay ventas para exportar"}
 
+        print(f"🚀 AppsScriptWriter: Exportando {len(ventas)} ventas...")
+        print(f"📍 URL: {self.gas_url}")
+
         # Preparar filas
         filas = [self.preparar_fila_venta(v) for v in ventas]
+        print(f"📋 Filas preparadas: {len(filas)}")
+        if filas:
+            print(f"📝 Primera fila: {filas[0]}")
 
         # Backup CSV local
         try:
@@ -123,31 +142,43 @@ class AppsScriptWriter:
                 writer = csv.writer(f)
                 for fila in filas:
                     writer.writerow(fila)
+            print(f"💾 Backup CSV guardado en: {csv_file}")
         except Exception as e:
-            logger.warning(f"No se pudo escribir CSV local: {e}")
+            print(f"⚠️ No se pudo escribir CSV local: {e}")
 
         # Enviar en uno o varios lotes si necesario
-        max_batch = 300  # prudente; Apps Script puede procesar cientos por llamada
+        max_batch = 300
         total = 0
         errores = []
+        
         for i in range(0, len(filas), max_batch):
             lote = filas[i:i+max_batch]
             payload = {
                 "action": "appendRows",
                 "rows": lote
             }
+            print(f"📤 Enviando lote {i//max_batch + 1}: {len(lote)} filas")
+            
             try:
                 res = self._post_gas(payload)
+                print(f"📥 Respuesta del Apps Script: {res}")
+                
                 if not res or not res.get("success", False):
                     errores.append(res)
+                    print(f"❌ Error en lote: {res}")
                 else:
                     total += len(lote)
+                    print(f"✅ Lote exportado exitosamente")
+                    
             except Exception as e:
                 errores.append(str(e))
+                print(f"❌ Error enviando lote: {e}")
 
         if total == len(filas):
+            print(f"✅ Exportación completa: {total} ventas exportadas")
             return {"success": True, "ventas_exportadas": total, "mensaje": f"✅ {total} ventas exportadas vía Apps Script"}
         else:
+            print(f"⚠️ Exportación parcial: {total}/{len(filas)} ventas exportadas")
             return {
                 "success": False,
                 "error": "EXPORT_PARTIAL",

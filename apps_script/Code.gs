@@ -36,17 +36,70 @@ function doPost(e) {
       var rows = data.rows || [];
       if (!rows.length) return _json({ success: false, error: 'NO_ROWS' }, 400);
 
+      console.log('Recibidas ' + rows.length + ' filas para agregar');
+      console.log('Primera fila: ' + JSON.stringify(rows[0]));
+
       var ss = _openSpreadsheet_();
       var ws = _getWorksheet_(ss);
 
-    // Calcular siguiente fila después de la última con datos (simple y efectivo)
-    var startRow = _getFirstEmptyRow_(ws); // deja fila 1 para headers
+      console.log('Hoja de trabajo: ' + ws.getName());
+      console.log('Última fila antes: ' + ws.getLastRow());
+
+      // Calcular siguiente fila después de la última con datos (simple y efectivo)
+      var startRow = _getFirstEmptyRow_(ws); // deja fila 1 para headers
       var numRows = rows.length;
       var numCols = rows[0].length;
+      
+      console.log('Escribiendo en fila: ' + startRow + ', filas: ' + numRows + ', columnas: ' + numCols);
+      
       var range = ws.getRange(startRow, 1, numRows, numCols);
       range.setValues(rows);
 
+      console.log('Última fila después: ' + ws.getLastRow());
       return _json({ success: true, appended: numRows, startRow: startRow });
+    }
+
+    // Nueva acción: recibir una sola venta y escribirla como una fila (A-J)
+    if (action === 'submit') {
+      var venta = data.venta || data || {};
+      // Campos esperados
+      var fecha = venta.fecha || '';
+      var notas = venta.notas || '';
+      var categoria = venta.categoria || '';
+      var tipo = venta.tipo || venta.tipoProducto || '';
+      var foto = venta.fotografia || venta.foto || venta.linkFotografia || '';
+      var precio = Number(venta.precio || venta.precioUnitario || 0);
+      var descuento = (venta.descuento !== undefined && venta.descuento !== null && String(venta.descuento) !== '') ? Number(venta.descuento) : '';
+      var precioFinal = (venta.precioFinal !== undefined && venta.precioFinal !== null && String(venta.precioFinal) !== '') ? Number(venta.precioFinal) : '';
+      var unidades = Number(venta.unidades || 0);
+      var pago = venta.pago || '';
+
+      // Si no vino precioFinal pero sí precio/desc, calcularlo
+      if (precioFinal === '' && !isNaN(precio)) {
+        var d = (!isNaN(Number(descuento)) ? Math.max(0, Math.min(100, Number(descuento))) : 0);
+        precioFinal = +(precio * (1 - d / 100)).toFixed(2);
+      }
+
+      var ss = _openSpreadsheet_();
+      var ws = _getWorksheet_(ss);
+
+      // Orden A-J
+      var row = [
+        fecha,        // A Fecha
+        notas,        // B Notas
+        categoria,    // C Categoria
+        tipo,         // D Tipo de Producto
+        foto,         // E Link de Fotografia
+        precio,       // F Precio (unitario base)
+        descuento,    // G Descuento (%)
+        precioFinal,  // H Precio Final (unitario)
+        unidades,     // I Unidades
+        pago          // J Forma de pago
+      ];
+
+      var startRow = _getFirstEmptyRow_(ws);
+      ws.getRange(startRow, 1, 1, row.length).setValues([row]);
+      return _json({ success: true, appended: 1, startRow: startRow });
     }
 
     return _json({ success: false, error: 'UNKNOWN_ACTION' }, 400);
@@ -65,9 +118,15 @@ function _openSpreadsheet_() {
 
 function _getWorksheet_(ss) {
   var props = PropertiesService.getScriptProperties();
-  var sheetName = props.getProperty('SHEET_NAME') || 'Ingreso Diario';
+  var sheetName = props.getProperty('SHEET_NAME') || 'Registro Diario';
   var ws = ss.getSheetByName(sheetName);
-  if (!ws) ws = ss.insertSheet(sheetName);
+  if (!ws) {
+    console.log('Hoja "' + sheetName + '" no encontrada, creando...');
+    ws = ss.insertSheet(sheetName);
+  }
+  
+  // Asegurar que los headers estén configurados
+  _setupHeaders_(ws);
   return ws;
 }
 
@@ -115,6 +174,39 @@ function _rowHasMeaningfulData_(row) {
   return false;
 }
 
+// Configurar headers con los campos requeridos
+function _setupHeaders_(ws) {
+  // Verificar si ya tiene headers
+  var firstRow = ws.getRange(1, 1, 1, 10).getValues()[0];
+  var hasHeaders = firstRow.some(function(cell) { 
+    return cell && String(cell).trim() !== ''; 
+  });
+  
+  if (!hasHeaders) {
+    // Configurar headers según los campos requeridos
+    var headers = [
+      'Fecha',           // A
+      'Notas',           // B  
+      'Categoria',      // C
+      'Tipo de Producto', // D
+      'Link de Fotografia', // E
+      'Precio',          // F
+      'Descuento',       // G
+      'Precio Final',    // H
+      'Unidades',        // I
+      'Forma de pago'    // J
+    ];
+    
+    ws.getRange(1, 1, 1, headers.length).setValues([headers]);
+    
+    // Formatear headers
+    var headerRange = ws.getRange(1, 1, 1, headers.length);
+    headerRange.setFontWeight('bold');
+    headerRange.setBackground('#4285f4');
+    headerRange.setFontColor('white');
+  }
+}
+
 // Soporte GET para ver estado desde el navegador (opcional)
 function doGet(e) {
   try {
@@ -130,12 +222,18 @@ function doGet(e) {
       }
     }
 
+    var action = (e && e.parameter && e.parameter.action) ? String(e.parameter.action) : '';
+    if (action === 'categories') {
+      var cats = _readCategories_();
+      return _json({ success: true, categories: cats });
+    }
+
     var ss = _openSpreadsheet_();
     var ws = _getWorksheet_(ss);
     return _json({
       success: true,
       method: 'GET',
-      hint: 'Usa POST con action=appendRows para escribir filas',
+      hint: 'Usa POST con action=submit o action=appendRows para escribir filas',
       title: ss.getName(),
       sheet: ws.getName(),
       lastRow: ws.getLastRow()
@@ -143,6 +241,26 @@ function doGet(e) {
   } catch (err) {
     return _json({ success: false, error: String(err) }, 500);
   }
+}
+
+// Lee la hoja "Categorias" columnas A (Categoria) y B (Tipo de Producto)
+function _readCategories_() {
+  var props = PropertiesService.getScriptProperties();
+  var sheetId = props.getProperty('SHEET_ID');
+  if (!sheetId) throw new Error('SHEET_ID no configurado en propiedades del script');
+  var ss = SpreadsheetApp.openById(sheetId);
+  var ws = ss.getSheetByName('Categorias');
+  if (!ws) return [];
+  var lastRow = ws.getLastRow();
+  if (lastRow < 2) return [];
+  var values = ws.getRange(2, 1, lastRow - 1, 2).getValues(); // desde fila 2, columnas A-B
+  var out = [];
+  for (var i = 0; i < values.length; i++) {
+    var cat = String(values[i][0] || '').trim();
+    var tipo = String(values[i][1] || '').trim();
+    if (cat || tipo) out.push({ categoria: cat, tipo: tipo });
+  }
+  return out;
 }
 
 

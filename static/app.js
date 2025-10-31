@@ -183,7 +183,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!res.ok || !data.success) {
                     throw new Error(data.mensaje || data.error || 'Error al exportar');
                 }
-                mostrarNotificacion('✅ Ventas exportadas al historial', 'success');
+                
+                // Mostrar notificación simple (sin mencionar Google Sheets)
+                mostrarNotificacion(data.mensaje, 'success');
                 window.location.href = '/historial';
             } catch (e) {
                 mostrarNotificacion('❌ ' + e.message, 'error');
@@ -389,6 +391,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
         }
+        // Conservar precio base (descuentoPct ya fue calculado arriba)
+        const precioBase = isNaN(parseFloat(precioValue)) ? '' : parseFloat(precioValue);
         // Usar precio final como precio unitario enviado al backend
         precio = precioFinalUnit;
         if (isCambio) {
@@ -430,7 +434,21 @@ document.addEventListener('DOMContentLoaded', () => {
             console.warn('Error subiendo fotografía', e);
         }
 
-        const venta = { fecha, categoria, tipo, fotografia: fotoUrl, precio, unidades, pago, notas };
+        const venta = {
+            fecha,
+            categoria,
+            tipo,
+            fotografia: fotoUrl,
+            // precio enviado al backend sigue siendo el unitario final
+            precio,
+            unidades,
+            pago,
+            notas,
+            // Campos adicionales para exportación a Sheets
+            precio_base: precioBase,
+            descuento: descuentoPct,
+            precio_final: precioFinalUnit
+        };
         console.log('Venta a enviar:', venta);
 
         try {

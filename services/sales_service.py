@@ -58,20 +58,22 @@ def _get_sheets_writer():
     global _sheets_writer
     if _sheets_writer is None:
         try:
-            # Forzar uso de API directa de Google Sheets para mayor confiabilidad ahora
-            # Si deseas volver a Apps Script, comenta la línea siguiente y descomenta la lógica por GAS_URL.
-            print("[INFO] Usando GoogleSheetsWriter (API directa), ignorando GAS_URL temporalmente")
-            # Import perezoso para evitar cargar config/credenciales al arranque
-            from .google_sheets_writer import GoogleSheetsWriter
-            _sheets_writer = GoogleSheetsWriter()
-            # -- Modo anterior por GAS_URL --
-            # gas_url = (GOOGLE_APPS_SCRIPT.get("GAS_URL") or "").strip()
-            # if gas_url:
-            #     _sheets_writer = AppsScriptWriter()
-            # else:
-            #     _sheets_writer = GoogleSheetsWriter()
+            # FORZAR uso de Apps Script
+            gas_url = (GOOGLE_APPS_SCRIPT.get("GAS_URL") or "").strip()
+            print(f"[INFO] GAS_URL configurado: {gas_url}")
+            
+            if gas_url:
+                print("[INFO] FORZANDO uso de AppsScriptWriter")
+                from .apps_script_writer import AppsScriptWriter
+                _sheets_writer = AppsScriptWriter()
+                print("[INFO] AppsScriptWriter inicializado correctamente")
+            else:
+                print("[ERROR] GAS_URL no configurado - no se puede usar Apps Script")
+                _sheets_writer = None
         except Exception as e:
-            print(f"⚠️ No se pudo inicializar GoogleSheetsWriter: {e}")
+            print(f"⚠️ Error inicializando AppsScriptWriter: {e}")
+            import traceback
+            traceback.print_exc()
             _sheets_writer = None
     return _sheets_writer
 
@@ -159,12 +161,25 @@ def limpiar_ventas():
     _save_ventas()
 
 def exportar_ventas_a_historial():
-    """Mueve todas las ventas actuales al historial agrupándolas por 'fecha' y luego limpia las ventas actuales."""
+    """Mueve todas las ventas actuales al historial agrupándolas por 'fecha' y luego limpia las ventas actuales.
+    También exporta automáticamente al Google Sheets de forma silenciosa."""
     global _historial
     if not _ventas:
         return {"success": False, "error": "NO_HAY_VENTAS", "mensaje": "No hay ventas para exportar"}
     try:
-        # Asegurar estructura por fecha
+        # 1. Exportar al Google Sheets de forma silenciosa (sin notificar al usuario)
+        sheets_exported = False
+        try:
+            sheets_result = exportar_todas_las_ventas_a_sheets()
+            sheets_exported = sheets_result.get("success", False)
+            if sheets_exported:
+                print(f"✅ Exportación silenciosa a Google Sheets exitosa: {sheets_result.get('mensaje', '')}")
+            else:
+                print(f"⚠️ Exportación silenciosa a Google Sheets falló: {sheets_result.get('mensaje', 'Error desconocido')}")
+        except Exception as sheets_error:
+            print(f"⚠️ Error en exportación silenciosa a Google Sheets: {sheets_error}")
+        
+        # 2. Mover al historial local (siempre se hace)
         for v in _ventas:
             fecha = v.get('fecha')
             if not fecha:
@@ -173,9 +188,16 @@ def exportar_ventas_a_historial():
             # Copia sin el campo 'total' si se prefiere mostrar calculado o mantenerlo
             _historial[fecha].append(dict(v))
         _save_historial()
-        # Limpiar ventas actuales
+        
+        # 3. Limpiar ventas actuales
         limpiar_ventas()
-        return {"success": True, "mensaje": "Ventas exportadas al historial"}
+        
+        # 4. Mensaje simple para el usuario (sin mencionar Google Sheets)
+        return {
+            "success": True, 
+            "mensaje": "✅ Ventas exportadas al historial",
+            "sheets_exported": sheets_exported  # Para uso interno, no se muestra al usuario
+        }
     except Exception as e:
         return {"success": False, "error": "EXPORT_HISTORY_ERROR", "mensaje": str(e)}
 
@@ -214,10 +236,27 @@ def exportar_todas_las_ventas_a_sheets():
         }
 
     try:
+        print(f"🚀 EXPORTACIÓN: Iniciando exportación de {len(_ventas)} ventas...")
         writer = _get_sheets_writer()
+        
+        if writer is None:
+            return {
+                "success": False,
+                "error": "WRITER_NOT_AVAILABLE",
+                "mensaje": "No se pudo inicializar el writer de Google Sheets"
+            }
+        
+        print(f"✅ Writer inicializado: {type(writer).__name__}")
         print(f"🚀 Exportando {len(_ventas)} ventas...")
-        return writer.agregar_multiples_ventas_a_sheets(_ventas)
+        
+        resultado = writer.agregar_multiples_ventas_a_sheets(_ventas)
+        print(f"📊 Resultado de exportación: {resultado}")
+        return resultado
+        
     except Exception as e:
+        print(f"❌ Error en exportar_todas_las_ventas_a_sheets: {e}")
+        import traceback
+        traceback.print_exc()
         return {
             "success": False,
             "error": "EXPORT_ERROR",

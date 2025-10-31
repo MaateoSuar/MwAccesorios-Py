@@ -55,9 +55,9 @@ def get_google_credentials():
 
 # Configuración de Google Sheets
 GOOGLE_SHEETS_CONFIG = {
-    "SHEET_ID": os.getenv("GOOGLE_SHEETS_SHEET_ID", "1QG8a6yHmad5sFpVcKhC3l0oEAcjJftmHV2KAF56bkkM"),
-    "SHEET_NAME": os.getenv("GOOGLE_SHEETS_SHEET_NAME", "Ingreso Diario"),
-    "CATALOG_GID": os.getenv("GOOGLE_SHEETS_CATALOG_GID", "180421919"),  # GID de la hoja "Códigos Stock" (catálogo)
+    "SHEET_ID": os.getenv("GOOGLE_SHEETS_SHEET_ID", "1yGcWVzdZzfSREiv39l4THat_8qsOF1cfQZaxdAQbBRw"),
+    "SHEET_NAME": os.getenv("GOOGLE_SHEETS_SHEET_NAME", "Hoja 1"),
+    "CATALOG_GID": os.getenv("GOOGLE_SHEETS_CATALOG_GID", "0"),  # GID de la hoja principal
     "TIMEOUT": int(os.getenv("GOOGLE_SHEETS_TIMEOUT", "10")),  # segundos
     "RETRY_ATTEMPTS": int(os.getenv("GOOGLE_SHEETS_RETRY_ATTEMPTS", "3")),
     "CREDENTIALS": get_google_credentials()
@@ -65,7 +65,7 @@ GOOGLE_SHEETS_CONFIG = {
 
 # Configuración de Google Apps Script (GAS)
 GOOGLE_APPS_SCRIPT = {
-    "GAS_URL": os.getenv("GAS_URL", ""),
+    "GAS_URL": os.getenv("GAS_URL", "https://script.google.com/macros/s/AKfycbwJSgzppM13yjR-fMFccp-A5oc1LA3oqJlndR3phx_X_65wNsF40eyYAbLOD1bNjshsng/exec"),
     "GAS_API_KEY": os.getenv("GAS_API_KEY", ""),
     "TIMEOUT": int(os.getenv("GAS_TIMEOUT", "15")),
 }

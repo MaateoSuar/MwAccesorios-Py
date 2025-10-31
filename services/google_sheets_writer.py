@@ -33,11 +33,10 @@ class GoogleSheetsWriter:
         self.data_dir = Path("data")
         self.data_dir.mkdir(exist_ok=True)
         
-        # Headers esperados para normalización
+        # Headers esperados para normalización (nuevos campos)
         self.expected_headers = [
-            "Fecha", "Notas", "ID", "Nombre del Elemento", "Precio", 
-            "Unidades", "Precio Unitario", "Costo U", "Tipo", 
-            "Forma de Pago", "Costo Total", "Margen"
+            "Fecha", "Notas", "Categoria", "Tipo de Producto", "Link de Fotografia",
+            "Precio", "Descuento", "Precio Final", "Unidades", "Forma de pago"
         ]
         # Servicio para obtener 'Tipo' por ID
         self.tipo_service = None
@@ -331,47 +330,41 @@ class GoogleSheetsWriter:
             return fila_datos
     
     def preparar_fila_venta(self, venta):
-        """Prepara los datos de la venta en el formato del Google Sheet"""
+        """Prepara los datos de la venta en el formato del Google Sheet con nuevos campos"""
         try:
             # El precio que ingresa el usuario es el precio unitario
             precio_unitario = round(venta["precio"], 2)
+            unidades = int(venta["unidades"])
             
-            # Calcular precio total (precio unitario × unidades)
-            precio_total = round(precio_unitario * venta["unidades"], 2)
+            # Calcular precio final (precio unitario × unidades)
+            precio_final = round(precio_unitario * unidades, 2)
             
-            # Calcular margen (precio total - costo, asumiendo costo = 0 por ahora)
-            margen = precio_total
+            # Calcular descuento (por defecto 0, se puede modificar)
+            descuento = venta.get("descuento", 0)
+            if descuento > 0:
+                precio_final = round(precio_final * (1 - descuento/100), 2)
             
-            # Formato de fecha para el sheet (DD/MM)
+            # Formato de fecha para el sheet (DD/MM/YYYY)
             fecha_obj = datetime.fromisoformat(venta["fecha"])
-            fecha_formateada = fecha_obj.strftime("%d/%m")
             
-            # Resolver 'Tipo' desde hoja externa según ID
-            tipo_val = ""
-            try:
-                if self.tipo_service:
-                    tipo_val = self.tipo_service.obtener_tipo_por_id(venta["id"]) or ""
-            except Exception as e:
-                logger.warning(f"No se pudo obtener 'Tipo' para ID {venta.get('id')}: {e}")
-            try:
-                logger.info(f"Tipo resuelto para ID {venta.get('id')}: '{tipo_val}'")
-            except Exception:
-                pass
+            # Obtener categoría del producto (si está disponible)
+            categoria = venta.get("categoria", "General")
+            
+            # Obtener link de fotografía (si está disponible)
+            link_foto = venta.get("link_foto", "")
 
-            # Preparar fila según el formato esperado
+            # Preparar fila según el nuevo formato
             fila = [
-                fecha_obj.strftime("%d/%m"),                   # A: Fecha (DD/MM)
+                fecha_obj.strftime("%d/%m/%Y"),              # A: Fecha (DD/MM/YYYY)
                 venta.get("notas", ""),                      # B: Notas
-                venta["id"],                                 # C: ID
-                venta["nombre"],                             # D: Nombre del Elemento
-                float(precio_total),                         # E: Precio (precio total = precio unitario × unidades)
-                int(venta["unidades"]),                     # F: Unidades (entero)
-                float(precio_unitario),                      # G: Precio Unitario (precio por unidad)
-                "Sin stock",                                # H: Costo U (por defecto)
-                tipo_val,                                    # I: Tipo (derivado por ID)
-                venta["pago"],                              # J: Forma de pago
-                float(precio_total),                         # K: Costo Total (mismo que precio total)
-                float(margen)                                # L: Margen (formato numérico)
+                categoria,                                   # C: Categoria
+                venta["nombre"],                             # D: Tipo de Producto
+                link_foto,                                   # E: Link de Fotografia
+                float(precio_unitario),                      # F: Precio (precio unitario)
+                float(descuento),                           # G: Descuento
+                float(precio_final),                         # H: Precio Final
+                int(unidades),                              # I: Unidades
+                venta.get("pago", "Efectivo")               # J: Forma de pago
             ]
             
             # Normalizar la fila
