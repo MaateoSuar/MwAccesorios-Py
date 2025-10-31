@@ -228,9 +228,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 inputDescuento.value = String(n);
             }
         }
-        if (!isCambio) { precioFinalTouched = false; recalcularPrecioFinalSiAuto(); }
+        if (!isCambio) {
+            if (precioFinalTouched) {
+                // Si el usuario fijó manualmente el Precio Final, ajustamos el Precio base
+                recalcularPrecioBaseDesdeFinal();
+            } else {
+                // Si el PF no fue tocado, recalculamos PF automáticamente desde el Precio base
+                recalcularPrecioFinalSiAuto();
+            }
+        }
     });
-    if (inputPrecioFinal) inputPrecioFinal.addEventListener('input', () => { precioFinalTouched = true; });
+    if (inputPrecioFinal) inputPrecioFinal.addEventListener('input', () => {
+        precioFinalTouched = true;
+        // Al editar Precio Final, recalcular Precio base desde el descuento vigente
+        recalcularPrecioBaseDesdeFinal();
+    });
 
     // Catálogo eliminado: no hay dropdown de IDs
 
@@ -586,6 +598,21 @@ document.addEventListener('DOMContentLoaded', () => {
         if (precioFinalTouched) return; // respetar edición manual
         const val = calcularPrecioFinalUnit();
         inputPrecioFinal.value = val;
+    }
+
+    // Recalcular Precio base a partir de Precio Final y Descuento actual
+    function recalcularPrecioBaseDesdeFinal() {
+        if (!inputPrecioFinal || !inputPrecio) return;
+        const pfStr = inputPrecioFinal.value;
+        const pf = parseFloat(pfStr);
+        if (isNaN(pf) || !isFinite(pf)) return;
+        // En Cambios, el descuento es 0 por definición
+        const dStr = inputDescuento?.value || '';
+        const dParsed = parseFloat(dStr);
+        const d = (isCambio ? 0 : (!isNaN(dParsed) && isFinite(dParsed) ? Math.min(100, Math.max(0, dParsed)) : 0));
+        const factor = 1 - (d / 100);
+        const base = factor === 0 ? pf : +(pf / factor).toFixed(2);
+        inputPrecio.value = isFinite(base) ? base : '';
     }
 
     // ======== UI por Categoria (Produccion Propia vs Indumentaria) ========
