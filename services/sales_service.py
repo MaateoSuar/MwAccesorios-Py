@@ -1,6 +1,7 @@
 from datetime import datetime
 import json
 from pathlib import Path
+from config import GOOGLE_APPS_SCRIPT
 
 DATA_DIR = Path("data")
 DATA_DIR.mkdir(exist_ok=True)
