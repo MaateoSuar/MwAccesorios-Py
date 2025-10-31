@@ -304,11 +304,22 @@
             });
             const monthKeys = Object.keys(meses).sort((a, b) => b.localeCompare(a));
             monthKeys.forEach(ym => {
-                // Total del mes
+                // Totales del mes (globales y por forma de pago)
                 let monthTotal = 0;
+                let monthTarjeta = 0;
+                let monthEfectivo = 0;
+                const esTarjeta = (p) => {
+                    if (!p) return false;
+                    const s = String(p).toLowerCase();
+                    return s.includes('debito') || s.includes('débito') || s.includes('transfer') || s.includes('credito') || s.includes('crédito') || s.includes('tarjeta');
+                };
                 (meses[ym] || []).forEach(d => {
                     const ventasDia = data[d] || [];
-                    monthTotal += ventasDia.reduce((acc, v) => acc + (Number(v.total) || (Number(v.precio) * Number(v.unidades)) || 0), 0);
+                    ventasDia.forEach(v => {
+                        const rowTotal = (Number(v.total) || (Number(v.precio) * Number(v.unidades)) || 0);
+                        monthTotal += rowTotal;
+                        if (esTarjeta(v.pago)) monthTarjeta += rowTotal; else if ((v.pago || '').toLowerCase().includes('efect')) monthEfectivo += rowTotal;
+                    });
                 });
 
                 const monthSection = document.createElement('div');
@@ -320,7 +331,13 @@
                             <i class="fas fa-chevron-right text-gray-600" data-month-arrow></i>
                             <h3 class="text-base md:text-lg font-semibold primary-text">${formatearMesDisplay(ym)}</h3>
                         </div>
-                        <div class="text-[11px] sm:text-xs md:text-sm text-gray-700 font-bold" data-month-total>Total del Mes: $${monthTotal.toFixed(2)}</div>
+                        <div class="text-[11px] sm:text-xs md:text-sm text-gray-700 font-bold flex items-center gap-2 md:gap-3 justify-start">
+                            <span data-month-tarjeta>Total Tarjeta: $${monthTarjeta.toFixed(2)}</span>
+                            <span class="opacity-70">|</span>
+                            <span data-month-efectivo>Total Efectivo: $${monthEfectivo.toFixed(2)}</span>
+                            <span class="opacity-70">|</span>
+                            <span data-month-total>Total del Mes: $${monthTotal.toFixed(2)}</span>
+                        </div>
                     </button>
                     <div data-month-content class="mt-3 space-y-3 hidden"></div>
                 `;
@@ -339,7 +356,31 @@
                 const dias = meses[ym].sort((a, b) => b.localeCompare(a));
                 dias.forEach(fecha => {
                     const ventas = data[fecha] || [];
-                    const totalDia = ventas.reduce((acc, v) => acc + (Number(v.total) || (Number(v.precio) * Number(v.unidades)) || 0), 0);
+                    const esTarjetaDia = (p) => {
+                        if (!p) return false;
+                        const s = String(p).toLowerCase();
+                        return s.includes('debito') || s.includes('débito') || s.includes('transfer') || s.includes('credito') || s.includes('crédito') || s.includes('tarjeta');
+                    };
+                    let totalDia = 0;
+                    let totalTarjetaDia = 0;
+                    let totalEfectivoDia = 0;
+                    ventas.forEach(v => {
+                        const rowTotal = (Number(v.total) || (Number(v.precio) * Number(v.unidades)) || 0);
+                        totalDia += rowTotal;
+                        if (esTarjetaDia(v.pago)) totalTarjetaDia += rowTotal; else if ((v.pago || '').toLowerCase().includes('efect')) totalEfectivoDia += rowTotal;
+                    });
+
+                    // Arqueo de caja (usar CIERRE guardado por fecha en localStorage, sin cálculos)
+                    let cierre = 0;
+                    try {
+                        const k = `arqueo:${fecha}`;
+                        const saved = localStorage.getItem(k);
+                        if (saved) {
+                            const obj = JSON.parse(saved);
+                            cierre = parseFloat(obj?.cierre) || 0;
+                        }
+                    } catch (_) {}
+                    const efectivoCaja = +cierre.toFixed(2);
 
                     const group = document.createElement('div');
                     group.className = 'border border-gray-200 rounded-lg';
@@ -350,7 +391,15 @@
                                 <span class="font-semibold text-gray-800">${formatearFechaDisplay(fecha)}</span>
                                 <span class="text-[11px] sm:text-xs text-gray-500" data-count>(${ventas.length} ventas)</span>
                             </div>
-                            <div class="text-[11px] sm:text-xs md:text-sm text-gray-700" data-total>Total día: $${totalDia.toFixed(2)}</div>
+                            <div class="text-[11px] sm:text-xs md:text-sm text-gray-700 flex items-center gap-2 md:gap-3">
+                                <span data-efectivo-caja>Efectivo final en caja: $${efectivoCaja.toFixed(2)}</span>
+                                <span class="opacity-70">|</span>
+                                <span data-total-tarjeta>Tarjeta: $${totalTarjetaDia.toFixed(2)}</span>
+                                <span class="opacity-70">|</span>
+                                <span data-total-efectivo>Efectivo: $${totalEfectivoDia.toFixed(2)}</span>
+                                <span class="opacity-70">|</span>
+                                <span data-total>Total día: $${totalDia.toFixed(2)}</span>
+                            </div>
                         </button>
                         <div class="hidden" data-content>
                             <div class="overflow-x-auto">
@@ -372,7 +421,7 @@
                                         ${ventas.map((v, i) => {
                                             const rowTotal = (Number(v.total) || (Number(v.precio) * Number(v.unidades)) || 0);
                                             return `
-                                            <tr data-index="${i}" data-total="${rowTotal}">
+                                            <tr data-index="${i}" data-id="${v.id ?? ''}" data-total="${rowTotal}" data-pago="${(v.pago || '').replace(/"/g,'&quot;')}">
                                                 <td class="px-3 md:px-6 py-3 whitespace-nowrap text-xs md:text-sm text-gray-700 text-center">${formatearFechaDisplay(v.fecha) || ''}</td>
                                                 <td class="px-3 md:px-6 py-3 whitespace-nowrap text-xs md:text-sm text-gray-700 text-center">${v.fotografia ? `<button type=\"button\" data-photo-url=\"${v.fotografia}\" class=\"inline-block rounded focus:outline-none\"><img src=\"${v.fotografia}\" alt=\"foto\" class=\"h-20 w-20 md:h-28 md:w-28 object-cover rounded hover:opacity-90 transition\"></button>` : '-'}</td>
                                                 <td class="px-3 md:px-6 py-3 whitespace-nowrap text-xs md:text-sm font-medium text-gray-900 text-center">${v.categoria || '-'}</td>
@@ -421,13 +470,17 @@
                             });
                             if (!confirmado) return;
                             try {
-                                const res = await fetch(`/api/historial/${fecha}/${idx}`, { method: 'DELETE' });
+                                const tr = btn.closest('tr');
+                                const itemId = tr?.getAttribute('data-id');
+                                const url = itemId ? `/api/historial/item/${itemId}` : `/api/historial/${fecha}/${idx}`;
+                                const res = await fetch(url, { method: 'DELETE' });
                                 const data = await res.json();
                                 if (!res.ok || !data.success) {
                                     throw new Error(data.mensaje || data.error || 'Error al eliminar');
                                 }
-                                const row = btn.closest('tr');
+                                const row = tr;
                                 const rowTotal = parseFloat(row?.dataset?.total || '0');
+                                const pagoRow = (row?.dataset?.pago || '').toLowerCase();
                                 row?.remove();
                                 const countEl = group.querySelector('[data-count]');
                                 if (countEl) {
@@ -437,20 +490,64 @@
                                     countEl.textContent = `(${next} ventas)`;
                                 }
                                 const totalEl = group.querySelector('[data-total]');
+                                const totalTarjetaEl = group.querySelector('[data-total-tarjeta]');
+                                const totalEfectivoEl = group.querySelector('[data-total-efectivo]');
                                 if (totalEl) {
                                     const currentText = totalEl.textContent.replace(/[^0-9.,-]/g, '').replace(',', '.');
                                     const current = parseFloat(currentText) || totalDia;
                                     const next = Math.max(0, +(current - rowTotal).toFixed(2));
                                     totalEl.textContent = `Total día: $${next.toFixed(2)}`;
                                 }
+                                if (totalTarjetaEl && (pagoRow.includes('debito') || pagoRow.includes('débito') || pagoRow.includes('transfer') || pagoRow.includes('credito') || pagoRow.includes('crédito') || pagoRow.includes('tarjeta'))) {
+                                    const curText = totalTarjetaEl.textContent.replace(/[^0-9.,-]/g, '').replace(',', '.');
+                                    const cur = parseFloat(curText) || 0;
+                                    const nxt = Math.max(0, +(cur - rowTotal).toFixed(2));
+                                    totalTarjetaEl.textContent = `Tarjeta: $${nxt.toFixed(2)}`;
+                                }
+                                let nuevoTotalEfectivo = null;
+                                if (totalEfectivoEl && pagoRow.includes('efect')) {
+                                    const curText = totalEfectivoEl.textContent.replace(/[^0-9.,-]/g, '').replace(',', '.');
+                                    const cur = parseFloat(curText) || 0;
+                                    const nxt = Math.max(0, +(cur - rowTotal).toFixed(2));
+                                    totalEfectivoEl.textContent = `Efectivo: $${nxt.toFixed(2)}`;
+                                    nuevoTotalEfectivo = nxt;
+                                }
+                                // Actualizar 'Efectivo final en caja' desde CIERRE almacenado (sin cálculos)
+                                const efectivoCajaEl = group.querySelector('[data-efectivo-caja]');
+                                if (efectivoCajaEl) {
+                                    try {
+                                        const k = `arqueo:${fecha}`;
+                                        const saved = localStorage.getItem(k);
+                                        let cierreNum = 0;
+                                        if (saved) {
+                                            const obj = JSON.parse(saved);
+                                            cierreNum = parseFloat(obj?.cierre) || 0;
+                                        }
+                                        efectivoCajaEl.textContent = `Efectivo final en caja: $${cierreNum.toFixed(2)}`;
+                                    } catch (_) {}
+                                }
                                 // Actualizar total del mes
                                 const monthContainer = group.closest('[data-month-section]');
                                 const monthTotalEl = monthContainer ? monthContainer.querySelector('[data-month-total]') : null;
+                                const monthTarjetaEl = monthContainer ? monthContainer.querySelector('[data-month-tarjeta]') : null;
+                                const monthEfectivoEl = monthContainer ? monthContainer.querySelector('[data-month-efectivo]') : null;
                                 if (monthTotalEl) {
                                     const currentText = monthTotalEl.textContent.replace(/[^0-9.,-]/g, '').replace(',', '.');
                                     const currentMonth = parseFloat(currentText) || monthTotal;
                                     const nextMonth = Math.max(0, +(currentMonth - rowTotal).toFixed(2));
                                     monthTotalEl.textContent = `Total del Mes: $${nextMonth.toFixed(2)}`;
+                                }
+                                if (monthTarjetaEl && (pagoRow.includes('debito') || pagoRow.includes('débito') || pagoRow.includes('transfer') || pagoRow.includes('credito') || pagoRow.includes('crédito') || pagoRow.includes('tarjeta'))) {
+                                    const curText = monthTarjetaEl.textContent.replace(/[^0-9.,-]/g, '').replace(',', '.');
+                                    const cur = parseFloat(curText) || 0;
+                                    const nxt = Math.max(0, +(cur - rowTotal).toFixed(2));
+                                    monthTarjetaEl.textContent = `Total Tarjeta: $${nxt.toFixed(2)}`;
+                                }
+                                if (monthEfectivoEl && pagoRow.includes('efect')) {
+                                    const curText = monthEfectivoEl.textContent.replace(/[^0-9.,-]/g, '').replace(',', '.');
+                                    const cur = parseFloat(curText) || 0;
+                                    const nxt = Math.max(0, +(cur - rowTotal).toFixed(2));
+                                    monthEfectivoEl.textContent = `Total Efectivo: $${nxt.toFixed(2)}`;
                                 }
                                 const tbody = group.querySelector('tbody');
                                 if (tbody && tbody.children.length === 0) {

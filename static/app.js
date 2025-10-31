@@ -774,7 +774,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td class="px-3 md:px-6 py-3 whitespace-nowrap text-xs md:text-sm text-gray-700">${formatearFechaDisplay(venta.fecha)}</td>
                 <td class="px-3 md:px-6 py-3 whitespace-nowrap text-xs md:text-sm font-medium text-gray-900">${venta.categoria || '-'}</td>
                 <td class="px-3 md:px-6 py-3 whitespace-nowrap text-xs md:text-sm text-gray-700" title="${venta.tipo}">${venta.tipo || '-'}</td>
-                <td class="px-3 md:px-6 py-3 whitespace-nowrap text-xs md:text-sm text-gray-700">${venta.fotografia ? `<img src="${venta.fotografia}" alt="foto" class="h-8 w-8 md:h-10 md:w-10 object-cover rounded">` : '-'}</td>
+                <td class="px-3 md:px-6 py-3 whitespace-nowrap text-xs md:text-sm text-gray-700">${venta.fotografia ? `<button type="button" data-photo-url="${venta.fotografia}" class="inline-block rounded focus:outline-none"><img src="${venta.fotografia}" alt="foto" class="h-8 w-8 md:h-10 md:w-10 object-cover rounded hover:opacity-90 transition"></button>` : '-'}</td>
                 <td class="px-3 md:px-6 py-3 whitespace-nowrap text-xs md:text-sm text-gray-700">$${Number(venta.precio).toFixed(2)}</td>
                 <td class="px-3 md:px-6 py-3 whitespace-nowrap text-xs md:text-sm text-gray-700">${venta.unidades}</td>
                 <td class="px-3 md:px-6 py-3 whitespace-nowrap text-xs md:text-sm font-medium text-green-600">$${Number(venta.total).toFixed(2)}</td>
@@ -803,6 +803,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         document.getElementById('totalGeneral').textContent = `$${totalGeneral.toFixed(2)}`;
 
+        // Acciones editar/eliminar
         tbody.querySelectorAll('button[data-action]').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const action = e.currentTarget.getAttribute('data-action');
@@ -811,6 +812,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (action === 'eliminar') eliminarVenta(idx);
             });
         });
+
+        // Lightbox para fotos
+        const imageModal = document.getElementById('imageModalIndex');
+        const imageModalImg = document.getElementById('imageModalImgIndex');
+        const imageModalClose = document.getElementById('imageModalCloseIndex');
+        tbody.querySelectorAll('button[data-photo-url]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const url = btn.getAttribute('data-photo-url');
+                if (!imageModal || !imageModalImg) return;
+                imageModalImg.src = url || '';
+                imageModal.classList.remove('hidden');
+            });
+        });
+        if (imageModal && imageModalClose) {
+            imageModal.addEventListener('click', (e) => { if (e.target === imageModal) imageModal.classList.add('hidden'); });
+            imageModalClose.addEventListener('click', () => imageModal.classList.add('hidden'));
+        }
     }
 
     function actualizarEstadisticas() {
@@ -828,6 +846,67 @@ document.addEventListener('DOMContentLoaded', () => {
     function actualizarContador() {
         const totalVentas = ventasCache.length;
         document.getElementById('totalVentas').textContent = totalVentas;
+    }
+
+    // ======== ARQUEO DE CAJA (Index) =========
+    const arqueoBtn = document.getElementById('arqueoBtn');
+    const arqueoPanel = document.getElementById('arqueoPanel');
+    const arqueoApertura = document.getElementById('arqueoApertura');
+    const arqueoCierre = document.getElementById('arqueoCierre');
+    const arqueoGuardar = document.getElementById('arqueoGuardar');
+    const arqueoCerrarPanel = document.getElementById('arqueoCerrarPanel');
+    const fechaInput = document.getElementById('fecha');
+
+    function getArqueoKey() {
+        const f = fechaInput?.value || new Date().toISOString().split('T')[0];
+        return `arqueo:${f}`;
+    }
+    function cargarArqueo() {
+        try {
+            const saved = localStorage.getItem(getArqueoKey());
+            if (saved) {
+                const obj = JSON.parse(saved);
+                if (arqueoApertura) arqueoApertura.value = obj?.apertura ?? '';
+                if (arqueoCierre) arqueoCierre.value = obj?.cierre ?? '';
+            } else {
+                if (arqueoApertura) arqueoApertura.value = '';
+                if (arqueoCierre) arqueoCierre.value = '';
+            }
+        } catch (_) {}
+    }
+    if (arqueoBtn) {
+        arqueoBtn.addEventListener('click', () => {
+            if (!arqueoPanel) return;
+            cargarArqueo();
+            arqueoPanel.classList.toggle('hidden');
+        });
+    }
+    if (arqueoCerrarPanel) {
+        arqueoCerrarPanel.addEventListener('click', () => arqueoPanel?.classList.add('hidden'));
+    }
+    if (arqueoGuardar) {
+        arqueoGuardar.addEventListener('click', () => {
+            const apertura = parseFloat(arqueoApertura?.value || '');
+            const cierre = parseFloat(arqueoCierre?.value || '');
+            const payload = {
+                apertura: isFinite(apertura) ? +apertura.toFixed(2) : null,
+                cierre: isFinite(cierre) ? +cierre.toFixed(2) : null,
+                savedAt: new Date().toISOString()
+            };
+            try {
+                localStorage.setItem(getArqueoKey(), JSON.stringify(payload));
+                mostrarNotificacion('✅ Arqueo guardado', 'success');
+                arqueoPanel?.classList.add('hidden');
+            } catch (e) {
+                mostrarNotificacion('❌ No se pudo guardar el arqueo', 'error');
+            }
+        });
+    }
+    if (fechaInput) {
+        fechaInput.addEventListener('change', () => {
+            // Cuando cambie la fecha, recargar valores de arqueo asociados
+            cargarArqueo();
+        });
     }
 
     // ======== EXPORTAR =========

@@ -84,13 +84,19 @@
 
     <div class="flex-1 container mx-auto px-4 py-8 max-w-7xl">
         <!-- Navegación principal -->
-        <div class="mb-6 flex items-center gap-2">
-            <button id="openSidebarBtn" type="button" class="md:hidden px-3 py-2 rounded-lg bg-gray-100 text-gray-800 text-sm font-semibold hover:bg-gray-200">
-                <i class="fas fa-bars mr-2"></i> Menú
+        <div class="mb-6 flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2">
+                <button id="openSidebarBtn" type="button" class="md:hidden px-3 py-2 rounded-lg bg-gray-100 text-gray-800 text-sm font-semibold hover:bg-gray-200">
+                    <i class="fas fa-bars mr-2"></i> Menú
+                </button>
+                <a href="/" class="px-4 py-2 rounded-lg bg-gray-900 text-white text-sm font-semibold">Registrar Ventas</a>
+                <a href="/historial" class="px-4 py-2 rounded-lg bg-gray-100 text-gray-800 text-sm font-semibold hover:bg-gray-200">Historial de Ventas</a>
+            </div>
+            <button id="arqueoBtn" type="button" class="px-4 py-2 rounded-lg bg-yellow-100 text-yellow-800 text-sm font-semibold hover:bg-yellow-200">
+                <i class="fas fa-cash-register mr-2"></i> Arqueo de Caja
             </button>
-            <a href="/" class="px-4 py-2 rounded-lg bg-gray-900 text-white text-sm font-semibold">Registrar Ventas</a>
-            <a href="/historial" class="px-4 py-2 rounded-lg bg-gray-100 text-gray-800 text-sm font-semibold hover:bg-gray-200">Historial de Ventas</a>
         </div>
+
         <!-- Formulario -->
         <div id="ventaFormCard" class="bg-white rounded-xl shadow-lg overflow-hidden">
             <div class="p-6">
@@ -111,6 +117,24 @@
                                 <input type="date" id="fecha" name="fecha"
                                     class="w-full px-4 py-2 border border-gray-300 rounded-lg input-focus focus:outline-none"
                                     required>
+                            </div>
+                        </div>
+                        <!-- Panel Arqueo de Caja -->
+                        <div id="arqueoPanel" class="hidden md:col-span-1">
+                            <label class="block text-sm font-medium primary-text mb-1">Arqueo de Caja</label>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                                <div>
+                                    <label class="block text-xs text-yellow-900 mb-1">Apertura de Caja ($)</label>
+                                    <input type="number" step="0.01" id="arqueoApertura" class="w-full px-3 py-2 border border-yellow-200 rounded-lg focus:outline-none" placeholder="0.00">
+                                </div>
+                                <div>
+                                    <label class="block text-xs text-yellow-900 mb-1">Cierre de Caja ($)</label>
+                                    <input type="number" step="0.01" id="arqueoCierre" class="w-full px-3 py-2 border border-yellow-200 rounded-lg focus:outline-none" placeholder="0.00">
+                                </div>
+                                <div class="sm:col-span-2 flex justify-end gap-2">
+                                    <button type="button" id="arqueoGuardar" class="px-4 py-2 bg-yellow-600 text-white rounded-lg text-xs font-medium hover:bg-yellow-700">Guardar</button>
+                                    <button type="button" id="arqueoCerrarPanel" class="px-4 py-2 bg-gray-100 text-gray-800 rounded-lg text-xs font-medium hover:bg-gray-200">Cerrar</button>
+                                </div>
                             </div>
                         </div>
 
@@ -306,6 +330,19 @@
                         </tfoot>
                     </table>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de imagen (lightbox) -->
+    <div id="imageModalIndex" class="hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
+        <div class="relative max-w-4xl w-full mx-4">
+            <div class="relative inline-block mx-auto">
+                <img id="imageModalImgIndex" src="" alt="foto" class="max-h-[80vh] w-auto rounded-lg shadow-lg bg-white" />
+                <button id="imageModalCloseIndex" type="button" class="absolute -top-3 -right-3 h-10 w-10 rounded-full bg-white text-gray-700 shadow hover:bg-gray-100 focus:outline-none">
+                    <span class="sr-only">Cerrar</span>
+                    ✕
+                </button>
             </div>
         </div>
     </div>

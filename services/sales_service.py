@@ -206,6 +206,7 @@ def listar_historial():
         for r in rows:
             fecha_key = str(r["fecha"])[:10]
             venta = {
+                "id": r.get("id"),
                 "fecha": fecha_key,
                 "categoria": r.get("categoria"),
                 "tipo": r.get("tipo"),
@@ -329,6 +330,13 @@ def eliminar_historial_item(fecha: str, index: int):
     if not items:
         _historial.pop(fecha, None)
     _save_historial()
+    return True
+
+def eliminar_historial_item_db(item_id: int):
+    """Elimina definitivamente una fila de ventas_historial en la DB por id."""
+    if not has_db():
+        raise RuntimeError("DB_NO_DISPONIBLE")
+    execute("DELETE FROM ventas_historial WHERE id = %s", (int(item_id),))
     return True
 
 def obtener_estado_sheets():

@@ -5,6 +5,7 @@ from flask_login import LoginManager, UserMixin, login_user, login_required, log
 from functools import wraps
 from pathlib import Path
 from services.sales_service import listar_ventas, agregar_venta, actualizar_venta, eliminar_venta, limpiar_ventas, listar_historial, exportar_ventas_a_historial, eliminar_historial_item
+from services.sales_service import eliminar_historial_item_db
 import importlib
 import threading
 import requests
@@ -160,6 +161,15 @@ def api_exportar_historial():
         result = exportar_ventas_a_historial()
         status = 200 if result.get("success") else 400
         return jsonify(result), status
+    except Exception as e:
+        return jsonify({"success": False, "error": "UNEXPECTED", "mensaje": str(e)}), 500
+
+@app.route("/api/historial/item/<int:item_id>", methods=["DELETE"])
+@login_required
+def api_eliminar_historial_item_db(item_id: int):
+    try:
+        eliminar_historial_item_db(item_id)
+        return jsonify({"success": True, "message": "Elemento eliminado en DB"}), 200
     except Exception as e:
         return jsonify({"success": False, "error": "UNEXPECTED", "mensaje": str(e)}), 500
 
