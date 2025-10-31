@@ -2,6 +2,15 @@ from datetime import datetime
 import json
 from pathlib import Path
 from config import GOOGLE_APPS_SCRIPT
+try:
+    from services.db import has_db, execute, fetchall
+except Exception:
+    def has_db():
+        return False
+    def execute(*args, **kwargs):
+        raise RuntimeError("DB no disponible")
+    def fetchall(*args, **kwargs):
+        raise RuntimeError("DB no disponible")
 
 DATA_DIR = Path("data")
 DATA_DIR.mkdir(exist_ok=True)
@@ -51,6 +60,32 @@ def _save_historial():
 # Cargar ventas al iniciar
 _load_ventas()
 _load_historial()
+
+# Inicializar tabla en Postgres (append-only) si hay DB
+def _init_db_if_needed():
+    if not has_db():
+        return
+    execute(
+        """
+        CREATE TABLE IF NOT EXISTS ventas_historial (
+            id BIGSERIAL PRIMARY KEY,
+            fecha TIMESTAMPTZ NOT NULL,
+            notas TEXT,
+            categoria TEXT,
+            tipo TEXT,
+            fotografia TEXT,
+            precio_base NUMERIC(12,2) NOT NULL,
+            descuento NUMERIC(5,2) NOT NULL DEFAULT 0,
+            precio_final NUMERIC(12,2) NOT NULL,
+            unidades INT NOT NULL,
+            pago TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        CREATE INDEX IF NOT EXISTS ventas_historial_created_at_idx ON ventas_historial (created_at DESC);
+        """
+    )
+
+_init_db_if_needed()
 
 # Instancia del escritor de Google Sheets (lazy)
 _sheets_writer = None
@@ -116,12 +151,34 @@ def _normalizar_venta(data: dict) -> dict:
 
     total = round(precio * unidades, 2)
 
+    # Campos opcionales para exportación/DB
+    descuento_in = data.get("descuento")
+    try:
+        descuento_val = float(descuento_in) if descuento_in not in (None, "") else 0.0
+    except Exception:
+        descuento_val = 0.0
+
+    precio_base_in = data.get("precio_base")
+    try:
+        precio_base_val = float(precio_base_in) if precio_base_in not in (None, "") else precio
+    except Exception:
+        precio_base_val = precio
+
+    precio_final_in = data.get("precio_final")
+    try:
+        precio_final_val = float(precio_final_in) if precio_final_in not in (None, "") else precio
+    except Exception:
+        precio_final_val = precio
+
     return {
         "fecha": fecha,
         "categoria": categoria,
         "tipo": tipo,
         "fotografia": fotografia,
         "precio": float(precio),
+        "precio_base": float(precio_base_val),
+        "descuento": float(descuento_val),
+        "precio_final": float(precio_final_val),
         "unidades": int(unidades),
         "total": float(total),
         "pago": pago,
@@ -132,7 +189,38 @@ def listar_ventas():
     return list(_ventas)
 
 def listar_historial():
-    """Devuelve el historial agrupado por fecha: { 'YYYY-MM-DD': [ventas...] }"""
+    """Devuelve el historial agrupado por fecha: { 'YYYY-MM-DD': [ventas...] }
+    Si hay DB, se lee desde Postgres (append-only). Sino, fallback al JSON local.
+    """
+    if has_db():
+        rows = fetchall(
+            """
+            SELECT id, fecha, notas, categoria, tipo, fotografia,
+                   precio_base, descuento, precio_final, unidades, pago, created_at
+            FROM ventas_historial
+            ORDER BY created_at DESC
+            LIMIT 1000
+            """
+        )
+        agrupado = {}
+        for r in rows:
+            fecha_key = str(r["fecha"])[:10]
+            venta = {
+                "fecha": fecha_key,
+                "categoria": r.get("categoria"),
+                "tipo": r.get("tipo"),
+                "fotografia": r.get("fotografia") or "",
+                "precio": float(r.get("precio_final") or 0),  # mantener compatible
+                "precio_base": float(r.get("precio_base") or 0),
+                "descuento": float(r.get("descuento") or 0),
+                "precio_final": float(r.get("precio_final") or 0),
+                "unidades": int(r.get("unidades") or 0),
+                "total": float((r.get("precio_final") or 0) * (r.get("unidades") or 0)),
+                "pago": r.get("pago") or "",
+                "notas": r.get("notas") or "",
+            }
+            agrupado.setdefault(fecha_key, []).append(venta)
+        return agrupado
     return dict(_historial)
 
 def agregar_venta(data: dict):
@@ -180,7 +268,34 @@ def exportar_ventas_a_historial():
         except Exception as sheets_error:
             print(f"⚠️ Error en exportación silenciosa a Google Sheets: {sheets_error}")
         
-        # 2. Mover al historial local (siempre se hace)
+        # 2. Guardar en DB (append-only) si existe
+        if has_db():
+            for v in _ventas:
+                # v ya contiene precio_base, descuento, precio_final si vinieron del cliente
+                execute(
+                    """
+                    INSERT INTO ventas_historial (
+                        fecha, notas, categoria, tipo, fotografia,
+                        precio_base, descuento, precio_final, unidades, pago
+                    ) VALUES (
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                    )
+                    """,
+                    (
+                        datetime.fromisoformat(v.get("fecha")),
+                        v.get("notas"),
+                        v.get("categoria"),
+                        v.get("tipo"),
+                        v.get("fotografia"),
+                        float(v.get("precio_base", v.get("precio", 0.0))),
+                        float(v.get("descuento", 0.0)),
+                        float(v.get("precio_final", v.get("precio", 0.0))),
+                        int(v.get("unidades", 0)),
+                        v.get("pago"),
+                    )
+                )
+
+        # 3. Mover al historial local (siempre se hace como espejo)
         for v in _ventas:
             fecha = v.get('fecha')
             if not fecha:
@@ -190,10 +305,10 @@ def exportar_ventas_a_historial():
             _historial[fecha].append(dict(v))
         _save_historial()
         
-        # 3. Limpiar ventas actuales
+        # 4. Limpiar ventas actuales
         limpiar_ventas()
         
-        # 4. Mensaje simple para el usuario (sin mencionar Google Sheets)
+        # 5. Mensaje simple para el usuario (sin mencionar Google Sheets)
         return {
             "success": True, 
             "mensaje": "✅ Ventas exportadas al historial",
