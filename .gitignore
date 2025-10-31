@@ -40,6 +40,10 @@ env/
 *.swo
 *~
 
+# Node (evitar que Nixpacks detecte Node en Railway)
+node_modules/
+package-lock.json
+
 # Archivos de sistema
 .DS_Store
 Thumbs.db
