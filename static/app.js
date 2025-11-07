@@ -23,6 +23,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const categoriaSelect = document.getElementById('categoria');
     const tipoPP = document.getElementById('tipoPP');
     const tipoIND = document.getElementById('tipoIND');
+    const esRegaloChk = document.getElementById('esRegalo');
+    const codigoRegaloInput = document.getElementById('codigoRegalo');
     const inputFoto = document.getElementById('fotografia');
     const inputPrecio = document.getElementById('precio');
     const inputUnidades = document.getElementById('unidades');
@@ -228,6 +230,65 @@ document.addEventListener('DOMContentLoaded', () => {
         categoriaSelect.addEventListener('change', () => renderTipoOptions(categoriaSelect.value));
     }
 
+    // ======== REGALO (código global) =========
+    const GIFT_SIGLAS_BY_CATEGORIA = {
+        'Accesorio personal': 'AP',
+        'Articulos varios': 'AV',
+        'Complemento de modo': 'CM',
+        'Linea mate': 'LM',
+        'Indumentaria': 'I'
+    };
+    function getSiglaRegalo() {
+        const cat = (categoriaSelect?.value || '').trim();
+        if (cat in GIFT_SIGLAS_BY_CATEGORIA) return GIFT_SIGLAS_BY_CATEGORIA[cat];
+        // Heurístico por si el nombre difiere levemente
+        const lc = cat.toLowerCase();
+        if (lc.includes('indument')) return 'I';
+        if (lc.includes('accesorio') || lc.includes('personal')) return 'AP';
+        if (lc.includes('varios') || lc.includes('vario')) return 'AV';
+        if (lc.includes('complement')) return 'CM';
+        if (lc.includes('mate')) return 'LM';
+        return 'AV';
+    }
+    function nextGiftCounter(siglaIn) {
+        try {
+            const sigla = (siglaIn || getSiglaRegalo() || 'AV').toUpperCase();
+            const key = `giftCounterGlobal:${sigla}`;
+            const cur = parseInt(localStorage.getItem(key) || '0');
+            const nxt = isNaN(cur) ? 1 : (cur + 1);
+            localStorage.setItem(key, String(nxt));
+            return nxt;
+        } catch (_) {
+            const k = `__giftCounter_${(siglaIn||'AV').toUpperCase()}`;
+            window[k] = (window[k] || 0) + 1;
+            return window[k];
+        }
+    }
+    function peekGiftCounter(siglaIn) {
+        try {
+            const sigla = (siglaIn || getSiglaRegalo() || 'AV').toUpperCase();
+            const key = `giftCounterGlobal:${sigla}`;
+            const cur = parseInt(localStorage.getItem(key) || '0');
+            return isNaN(cur) ? 0 : cur;
+        } catch (_) {
+            const k = `__giftCounter_${(siglaIn||'AV').toUpperCase()}`;
+            return window[k] || 0;
+        }
+    }
+    function computeGiftCodePreview() {
+        if (!esRegaloChk || !codigoRegaloInput) return;
+        // Si no está marcado, limpiar
+        if (!esRegaloChk.checked) { codigoRegaloInput.value = ''; return; }
+        // Si estamos editando un ítem del pre-ticket y ya hay un código cargado, no sobreescribir
+        if (preticketEditIndex !== null && (codigoRegaloInput.value || '').trim() !== '') return;
+        const sigla = getSiglaRegalo();
+        const candidate = (peekGiftCounter(sigla) + 1);
+        codigoRegaloInput.value = `R${sigla}${candidate}`;
+    }
+    esRegaloChk?.addEventListener('change', computeGiftCodePreview);
+    categoriaSelect?.addEventListener('change', computeGiftCodePreview);
+    tipoPP?.addEventListener('change', computeGiftCodePreview);
+
     // ======== EXPORTAR VENTAS AL HISTORIAL =========
     if (exportHistoryBtn) {
         exportHistoryBtn.addEventListener('click', async () => {
@@ -357,16 +418,17 @@ document.addEventListener('DOMContentLoaded', () => {
             const subtotal = calcularSubtotal(it);
             total += subtotal;
             const tr = document.createElement('tr');
+            const giftTag = (it.codigo_regalo || '').trim() ? `<span class="ml-2 px-2 py-0.5 text-xs rounded bg-pink-100 text-pink-700">Regalo: ${it.codigo_regalo}</span>` : '';
             tr.innerHTML = `
                 <td class="px-6 py-3 text-sm text-gray-700">${formatearFechaDisplay(it.fecha || '')}</td>
                 <td class="px-6 py-3 text-sm text-gray-700">${it.categoria || ''}</td>
-                <td class="px-6 py-3 text-sm text-gray-700">${it.tipo || it.nombre || ''}</td>
+                <td class="px-6 py-3 text-sm text-gray-700">${(it.tipo || it.nombre || '')} ${giftTag}</td>
                 <td class="px-6 py-3 text-sm text-gray-700">${formatoMoneda(it.precio)}</td>
                 <td class="px-6 py-3 text-sm text-gray-700">${it.unidades}</td>
                 <td class="px-6 py-3 text-sm text-gray-700 font-medium">${formatoMoneda(subtotal)}</td>
                 <td class="px-6 py-3 text-sm">
-                    <button data-idx="${idx}" class="preticket-edit px-3 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 mr-2">Editar</button>
-                    <button data-idx="${idx}" class="preticket-remove px-3 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200">Eliminar</button>
+                    <button type="button" data-idx="${idx}" class="preticket-edit px-3 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 mr-2">Editar</button>
+                    <button type="button" data-idx="${idx}" class="preticket-remove px-3 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200">Eliminar</button>
                 </td>`;
             preticketBody.appendChild(tr);
         });
@@ -375,7 +437,10 @@ document.addEventListener('DOMContentLoaded', () => {
         preticketCard.classList.toggle('hidden', false);
         preticketBody.querySelectorAll('.preticket-edit').forEach(btn => {
             btn.addEventListener('click', async (e) => {
-                const idx = parseInt(e.currentTarget.getAttribute('data-idx'));
+                const tgt = e.currentTarget || e.target;
+                if (!tgt) return;
+                const idxAttr = tgt.getAttribute('data-idx');
+                const idx = parseInt(idxAttr);
                 // Cargar item en el formulario para editar
                 const data = await fetchPretickets();
                 const clienteInput = getClienteActivoForRead();
@@ -402,6 +467,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     const pagoRadio = document.querySelector(`input[name="pago"][value="${item.pago}"]`);
                     if (pagoRadio) pagoRadio.checked = true;
                     if (inputNotas) inputNotas.value = item.notas || '';
+                // Regalo: reflejar en formulario (derivar de codigo_regalo o de notas si es necesario)
+                const derivadoEsRegalo = !!item.es_regalo || ((item.codigo_regalo || '').trim() !== '') || /Regalo\s*:/.test(item.notas || '');
+                if (esRegaloChk) esRegaloChk.checked = derivadoEsRegalo;
+                if (codigoRegaloInput) {
+                    const cod = (item.codigo_regalo || '').trim();
+                    if (cod) codigoRegaloInput.value = cod;
+                    else if (derivadoEsRegalo && (codigoRegaloInput.value || '').trim() === '') computeGiftCodePreview();
+                }
                     // Mostrar info de foto existente (no podemos pre-cargar el input file por seguridad del navegador)
                     const fotoFileName = document.getElementById('fotoFileName');
                     preticketEditCurrentPhotoUrl = item.fotografia || '';
@@ -433,7 +506,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 const data = await fetchPretickets();
                 const clienteInput = getClienteActivoForRead();
                 const cliente = resolveClienteKeyInsensitive(clienteInput, data);
-                const idx = parseInt(e.currentTarget.getAttribute('data-idx'));
+                const tgt = e.currentTarget || e.target;
+                if (!tgt) return;
+                const idxAttr = tgt.getAttribute('data-idx');
+                const idx = parseInt(idxAttr);
                 const confirmado = await confirmarAccionJSON({
                     titulo: 'Eliminar ítem',
                     mensaje: '¿Eliminar este ítem del pre-ticket?',
@@ -478,10 +554,25 @@ document.addEventListener('DOMContentLoaded', () => {
             if (preticketEditIndex !== null && (!venta.fotografia || venta.fotografia === '')) {
                 if (preticketEditCurrentPhotoUrl) venta.fotografia = preticketEditCurrentPhotoUrl;
             }
+            // Forzar sólo campos de regalo (sin modificar notas del ítem para evitar duplicados)
+            try {
+                const giftChecked = !!esRegaloChk?.checked;
+                const giftCodeDom = (codigoRegaloInput?.value || '').trim();
+                if (giftChecked) venta.es_regalo = true;
+                if (giftCodeDom) venta.codigo_regalo = giftCodeDom;
+            } catch (_) {}
+            console.log('[Preticket] Payload a enviar:', venta);
             const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(venta) });
             const rj = await res.json().catch(() => ({}));
             if (!res.ok || rj.success !== true) throw new Error(rj.error || 'Error al agregar al pre-ticket');
             mostrarNotificacion(preticketEditIndex !== null ? '✅ Ítem actualizado' : '✅ Ítem agregado al pre-ticket', 'success');
+            // Si el ítem es regalo, consumir el código (incrementar contador global) y actualizar previsualización
+            try {
+                if (venta.es_regalo && (venta.codigo_regalo || '').trim() !== '') {
+                    nextGiftCounter();
+                    computeGiftCodePreview();
+                }
+            } catch (_) {}
             preticketEditIndex = null;
             preticketEditCurrentPhotoUrl = '';
             preticketEditCliente = '';
@@ -500,11 +591,15 @@ document.addEventListener('DOMContentLoaded', () => {
             const cliente = getClienteActivoForWrite();
             // Validar que el pre-ticket tenga items antes de confirmar
             const dataPT = await fetchPretickets();
-            const itemsPT = dataPT[cliente] || [];
+            const resolvedCli = resolveClienteKeyInsensitive(cliente, dataPT);
+            const itemsPT = dataPT[resolvedCli] || [];
             if (!itemsPT || itemsPT.length === 0) {
                 mostrarNotificacion('El pre-ticket está vacío. Agrega ítems antes de confirmar.', 'warning');
                 return;
             }
+            // Detectar si el pre-ticket tiene al menos un regalo para incrementar contador tras confirmar
+            const hasGift = Array.isArray(itemsPT) && itemsPT.some(it => !!it?.es_regalo || (it?.codigo_regalo || '').trim() !== '');
+
             const confirmado = await confirmarAccionJSON({
                 titulo: 'Confirmar Ticket',
                 mensaje: 'Se generará una venta agrupada con todos los ítems del pre-ticket de este cliente. ¿Continuar?',
@@ -523,7 +618,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
             });
             const rj = await res.json().catch(() => ({}));
-            if (!res.ok || rj.success !== true) throw new Error(rj.error || 'Error al confirmar ticket');
+            if (!res.ok || rj.success !== true) {
+                console.error('[Confirm Preticket] Error respuesta', rj);
+                throw new Error(rj.mensaje || rj.error || 'Error al confirmar ticket');
+            }
             mostrarNotificacion('✅ Ticket confirmado como venta', 'success');
             await cargarVentas();
             // Limpiar el nombre del cliente y reiniciar el fallback tras confirmar
@@ -531,6 +629,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (clienteNombre) clienteNombre.value = '';
             preticketUpdateIndex = null;
             await refrescarPreticketUI();
+            // Recalcular previsualización de código de regalo para próxima venta
+            try { computeGiftCodePreview(); } catch (_) {}
         } catch (e) {
             mostrarNotificacion('❌ ' + (e?.message || 'Error'), 'error');
         } finally {
@@ -598,8 +698,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Recalcular Precio Final en tiempo real si no fue editado manualmente
-    if (inputPrecio) inputPrecio.addEventListener('input', () => { precioFinalTouched = false; recalcularPrecioFinalSiAuto(); });
     if (inputDescuento) inputDescuento.addEventListener('input', () => {
         // Limitar en tiempo real entre 0 y 100
         const raw = inputDescuento.value;
@@ -693,6 +791,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 fotoFileName.classList.remove('underline', 'text-green-700', 'decoration-green-500', 'decoration-2', 'underline-offset-2');
             }
             if (inputNotas) inputNotas.value = '';
+            // Regalo: mantener el check si estaba activado y preparar el siguiente código
+            if (esRegaloChk && esRegaloChk.checked) {
+                computeGiftCodePreview();
+            } else if (codigoRegaloInput) {
+                codigoRegaloInput.value = '';
+            }
             if (categoriaSelect) categoriaSelect.focus();
         } catch (_) {}
     }
@@ -935,6 +1039,14 @@ document.addEventListener('DOMContentLoaded', () => {
             console.warn('Error subiendo fotografía', e);
         }
 
+        // Regalo
+        const esRegalo = !!esRegaloChk?.checked;
+        let codigoRegalo = (codigoRegaloInput?.value || '').trim();
+        if (esRegalo && !codigoRegalo) {
+            const sigla = getSiglaRegalo();
+            codigoRegalo = `R${sigla}${peekGiftCounter() + 1}`; // previsualización
+        }
+
         const venta = {
             fecha,
             categoria,
@@ -944,14 +1056,18 @@ document.addEventListener('DOMContentLoaded', () => {
             precio,
             unidades,
             pago,
-            notas,
+            // anexar código de regalo a notas en venta directa
+            notas: esRegalo && codigoRegalo ? `${notas ? notas + '\n' : ''}Regalo: ${codigoRegalo}` : notas,
             // Campos adicionales para exportación a Sheets
             precio_base: precioBase,
             descuento: descuentoPct,
             precio_final: precioFinalUnit,
             // Campos auxiliares para edición: conservar selección exacta del usuario
             categoria_edit: categoria,
-            tipo_edit: tipo
+            tipo_edit: tipo,
+            // Regalo
+            es_regalo: esRegalo,
+            codigo_regalo: codigoRegalo
         };
         console.log('Venta a enviar:', venta);
 
@@ -975,6 +1091,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 lastAddedIndex = ventasCache.length;
                 
                 mostrarNotificacion('✅ ' + data.message, 'success');
+                // Tras guardar venta directa, recalcular previsualización del código de regalo
+                try { computeGiftCodePreview(); } catch (_) {}
+                // confirmar código de regalo usado: incrementar contador global
+                if (esRegalo && codigoRegalo) nextGiftCounter();
             } else {
                 console.log('Actualizando venta existente...');
                 const res = await fetch(`/api/ventas/${editIndex}`, {
@@ -1132,45 +1252,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const confirmCancelBtn = document.getElementById('confirmCancel');
     const clearAllBtn = document.getElementById('clearAllBtn');
 
-    // Configurar eventos del modal
-    if (confirmDeleteBtn && confirmCancelBtn) {
-        confirmDeleteBtn.addEventListener('click', async () => {
-            if (currentDeleteIndex === null) return;
-            
-            // Mostrar carga
-            confirmDeleteBtn.disabled = true;
-            confirmDeleteBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Eliminando...';
-            
-            const index = currentDeleteIndex;
-            const res = await fetch(`/api/ventas/${index}`, { method: 'DELETE' });
-            const data = await res.json();
-            
-            // Restaurar botón
-            confirmDeleteBtn.disabled = false;
-            confirmDeleteBtn.innerHTML = 'Eliminar';
-            confirmModal.classList.add('hidden');
-            
-            if (!res.ok) {
-                mostrarNotificacion(data.error || 'Error al eliminar', 'error');
-                return;
-            }
-            
-            mostrarNotificacion('Venta eliminada correctamente', 'success');
-            
-            if (editIndex === index) {
-                salirDeEdicion();
-                form.reset();
-                document.getElementById('fecha').value = today;
-                inputNombre.value = '';
-            }
-            
-            await cargarVentas();
-        });
-        
-        confirmCancelBtn.addEventListener('click', () => {
-            confirmModal.classList.add('hidden');
-        });
-    }
+    // Configuración del modal: los clicks se manejan desde confirmarAccionJSON
 
     // Vaciar todas las ventas con confirmación
     if (clearAllBtn) {
@@ -1280,10 +1362,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 </td>
                 <td class="px-3 md:px-6 py-3 text-xs md:text-sm text-gray-700 whitespace-normal break-words" title="${venta.notas}">${venta.notas || '-'}</td>
                 <td class="px-3 md:px-6 py-3 whitespace-nowrap text-right text-xs md:text-sm font-medium space-x-2">
-                    <button data-action="editar" data-index="${index}" class="text-blue-600 hover:text-blue-900">
+                    <button type="button" data-action="editar" data-index="${index}" class="text-blue-600 hover:text-blue-900">
                         <i class="fas fa-edit"></i>
                     </button>
-                    <button data-action="eliminar" data-index="${index}" class="text-red-600 hover:text-red-900">
+                    <button type="button" data-action="eliminar" data-index="${index}" class="text-red-600 hover:text-red-900">
                         <i class="fas fa-trash-alt"></i>
                     </button>
                 </td>
@@ -1293,80 +1375,61 @@ document.addEventListener('DOMContentLoaded', () => {
 
         document.getElementById('totalGeneral').textContent = `$${totalGeneral.toFixed(2)}`;
 
-        // Acciones editar/eliminar
-        tbody.querySelectorAll('button[data-action]').forEach(btn => {
-            btn.addEventListener('click', async (e) => {
-                const action = e.currentTarget.getAttribute('data-action');
-                const idx = parseInt(e.currentTarget.getAttribute('data-index'));
+        // Acciones editar/eliminar con DELEGACIÓN (más robusto tras cada render)
+        if (tbody) {
+            // Eliminar handler previo si existe para no duplicar
+            if (tbody.__ventasActionHandler) tbody.removeEventListener('click', tbody.__ventasActionHandler);
+            const handler = async (e) => {
+                const btn = e.target && e.target.closest && e.target.closest('button[data-action]');
+                if (!btn) return;
+                e.preventDefault();
+                e.stopPropagation();
+                const action = btn.getAttribute('data-action');
+                const idx = parseInt(btn.getAttribute('data-index'));
+                if (Number.isNaN(idx)) return;
+                if (action === 'eliminar') {
+                    console.log('[Ventas] Click eliminar idx=', idx);
+                    try {
+                        const ok = await confirmarAccionJSON({
+                            titulo: 'Eliminar venta',
+                            mensaje: '¿Seguro que deseas eliminar esta venta? Esta acción no se puede deshacer.',
+                            confirmarTexto: 'Eliminar', cancelarTexto: 'Cancelar'
+                        });
+                        if (!ok) return;
+                        const res = await fetch(`/api/ventas/${idx}`, { method: 'DELETE' });
+                        const data = await res.json().catch(() => ({}));
+                        if (!res.ok) { mostrarNotificacion(data.error || 'Error al eliminar', 'error'); return; }
+                        mostrarNotificacion('Venta eliminada correctamente', 'success');
+                        await cargarVentas();
+                    } catch (err) {
+                        mostrarNotificacion('❌ ' + (err?.message || 'Error'), 'error');
+                    }
+                    return;
+                }
                 if (action === 'editar') {
-                    // Intentar abrir panel de Pre-ticket usando 'Cliente: ...' de las notas
+                    // Intentar abrir panel de pre-ticket a partir de notas
                     try {
                         const v = ventasCache[idx];
                         const notas = String(v?.notas || '');
                         const m = notas.match(/Cliente:\s*([^\n|]+)/i);
                         const cliente = m ? m[1].trim() : '';
-                        if (cliente && typeof clienteNombre !== 'undefined' && clienteNombre) {
+                        if (cliente && clienteNombre) {
                             clienteNombre.value = cliente;
-                            if (typeof preticketCard !== 'undefined' && preticketCard) preticketCard.classList.remove('hidden');
+                            preticketCard?.classList.remove('hidden');
                             await fetchPretickets();
-                            // Si no hay items todavía en el preticket del cliente, intentar reconstruir desde la venta agrupada
-                            const itemsCliente = (preticketsCache[cliente] || []);
-                            if ((!itemsCliente || itemsCliente.length === 0)) {
-                                try {
-                                    const fotosArr = Array.isArray(v.fotos) ? v.fotos.filter(Boolean) : [];
-                                    let detalles = [];
-                                    if (Array.isArray(v.detalle) && v.detalle.length > 0) {
-                                        detalles = v.detalle.map(String);
-                                    } else {
-                                        // Fallback: extraer de notas líneas que comienzan con 'Detalle:'
-                                        const lines = String(v.notas || '').split(/\r?\n/).map(s => s.trim());
-                                        detalles = lines.filter(l => /^Detalle:/i.test(l)).map(l => l.replace(/^Detalle:\s*/i, ''));
-                                    }
-                                    for (let i = 0; i < detalles.length; i++) {
-                                        const d = String(detalles[i] || '');
-                                        // Formato esperado: "Nombre xU $subtotal - notas" (notas opcional)
-                                        const re = /^(.+?)\s+x(\d+)\s+\$\s?([0-9]+(?:[.,][0-9]+)?)(?:\s*-\s*(.*))?$/;
-                                        const mm = d.match(re);
-                                        if (!mm) continue;
-                                        const nombreTipo = mm[1].trim();
-                                        const unidades = parseInt(mm[2]);
-                                        const subtotal = parseFloat(mm[3].replace(',', '.'));
-                                        const notaItem = (mm[4] || '').trim();
-                                        const precioUnit = unidades > 0 ? +(subtotal / unidades).toFixed(2) : subtotal;
-                                        const foto = fotosArr[i] || (v.fotografia || '');
-                                        const item = {
-                                            fecha: v.fecha,
-                                            categoria: v.categoria,
-                                            tipo: nombreTipo,
-                                            precio: precioUnit,
-                                            unidades: unidades,
-                                            pago: v.pago,
-                                            notas: notaItem,
-                                            fotografia: foto
-                                        };
-                                        await fetch(`/api/pretickets/${encodeURIComponent(cliente)}/items`, {
-                                            method: 'POST',
-                                            headers: { 'Content-Type': 'application/json' },
-                                            body: JSON.stringify(item)
-                                        });
-                                    }
-                                    await fetchPretickets();
-                                } catch (_) {}
-                            }
                             await refrescarPreticketUI();
-                            // Scroll suave al panel
                             const card = document.getElementById('preticketCard');
-                            if (card && card.scrollIntoView) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                            if (card?.scrollIntoView) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
                             mostrarNotificacion(`Pre-ticket del cliente "${cliente}"`, 'info');
                             return;
                         }
                     } catch (_) {}
-                    // Fallback al editor de ventas estándar
                     entrarEnEdicion(idx);
                 }
-                if (action === 'eliminar') eliminarVenta(idx);
-            });
-        });
+            };
+            tbody.addEventListener('click', handler);
+            tbody.__ventasActionHandler = handler;
+        }
 
         // Lightbox / Galería para fotos
         const imageModal = document.getElementById('imageModalIndex');
@@ -1581,7 +1644,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ======== EXPORTAR =========
-    async function exportarExcel() { mostrarNotificacion('Exportación deshabilitada', 'warning'); }
     const watermark = document.getElementById('watermark');
     function updateWatermarkVisibility() {
         if (!watermark) return;

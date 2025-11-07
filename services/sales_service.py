@@ -191,7 +191,7 @@ def _normalizar_venta(data: dict) -> dict:
     except Exception:
         precio_final_val = precio
 
-    return {
+    out = {
         "fecha": fecha,
         "categoria": categoria,
         "tipo": tipo,
@@ -205,6 +205,16 @@ def _normalizar_venta(data: dict) -> dict:
         "pago": pago,
         "notas": notas
     }
+    # Campos opcionales: Regalo
+    try:
+        if 'es_regalo' in data:
+            out['es_regalo'] = bool(data.get('es_regalo'))
+        cod = data.get('codigo_regalo')
+        if cod not in (None, ""):
+            out['codigo_regalo'] = str(cod).strip()
+    except Exception:
+        pass
+    return out
 
 def listar_ventas():
     return list(_ventas)
@@ -299,6 +309,8 @@ def confirmar_preticket_como_venta(cliente: str, payload: dict):
     total = 0.0
     detalle = []
     fotos = []
+    # Recolectar códigos únicos de regalo
+    codigos_regalo = set()
     for it in items:
         try:
             pu = float(it.get("precio", 0.0))
@@ -315,11 +327,21 @@ def confirmar_preticket_como_venta(cliente: str, payload: dict):
         if foto_it:
             fotos.append(foto_it)
         nota_item = (it.get("notas") or "").strip()
+        # Remover cualquier mención 'Regalo: ...' de la nota del ítem para no duplicar en la venta agrupada
+        try:
+            import re
+            nota_item = re.sub(r"\bRegalo\s*:\s*[^\n|]+", "", nota_item).strip().strip("-").strip()
+        except Exception:
+            pass
         # Agregar nota del ítem si existe
         if nota_item:
             detalle.append(f"{nombre_tipo} x{u} ${subtotal} - {nota_item}")
         else:
             detalle.append(f"{nombre_tipo} x{u} ${subtotal}")
+        # Recolectar código de regalo si existe
+        cod_it = (it.get("codigo_regalo") or "").strip()
+        if cod_it:
+            codigos_regalo.add(cod_it)
     # Notas multilínea, cada ítem en un renglón con prefijo 'Detalle:'
     detalle_multilinea = []
     for d in detalle:
@@ -328,12 +350,18 @@ def confirmar_preticket_como_venta(cliente: str, payload: dict):
         f"Items: {len(items)}",
         *detalle_multilinea
     ]
+    if codigos_regalo:
+        notas_partes.append(f"Regalo: {', '.join(sorted(codigos_regalo))}")
     if notas_extra:
         notas_partes.append(str(notas_extra))
     notas = "\n".join(notas_partes)
     # Tomar referencias para edición futura (ej: precargar formulario)
     categoria_edit = (items[0].get("categoria") or "") if items else ""
     tipo_edit = (items[0].get("tipo") or items[0].get("nombre") or "") if items else ""
+
+    # Determinar flags finales de regalo
+    es_regalo_any = bool(codigos_regalo)
+    codigo_regalo_principal = sorted(codigos_regalo)[0] if es_regalo_any else ""
 
     venta_agrupada = {
         "fecha": fecha_in,
@@ -350,6 +378,9 @@ def confirmar_preticket_como_venta(cliente: str, payload: dict):
         # Campos auxiliares para edición posterior
         "categoria_edit": categoria_edit,
         "tipo_edit": tipo_edit,
+        # Regalo
+        "es_regalo": es_regalo_any,
+        "codigo_regalo": codigo_regalo_principal,
         # Cliente y items originales para reabrir en modo pre-ticket
         "cliente": cliente,
         "items_raw": list(items),
@@ -375,7 +406,7 @@ def agregar_venta(data: dict):
     """Agrega una venta SOLO a la memoria local, NO a Google Sheets automáticamente"""
     venta = _normalizar_venta(data)
     # Conservar metadatos opcionales (no usados en cálculos) si vienen presentes
-    for k in ("items_count", "detalle", "fotos", "categoria_edit", "tipo_edit", "cliente", "items_raw"):
+    for k in ("items_count", "detalle", "fotos", "categoria_edit", "tipo_edit", "cliente", "items_raw", "es_regalo", "codigo_regalo"):
         if k in data:
             venta[k] = data[k]
     _ventas.append(venta)
@@ -388,7 +419,7 @@ def actualizar_venta(index: int, data: dict):
         raise IndexError("Índice fuera de rango")
     venta = _normalizar_venta(data)
     # Conservar metadatos opcionales (no usados en cálculos) si vienen presentes
-    for k in ("items_count", "detalle", "fotos", "categoria_edit", "tipo_edit", "cliente", "items_raw"):
+    for k in ("items_count", "detalle", "fotos", "categoria_edit", "tipo_edit", "cliente", "items_raw", "es_regalo", "codigo_regalo"):
         if k in data:
             venta[k] = data[k]
     _ventas[index] = venta
