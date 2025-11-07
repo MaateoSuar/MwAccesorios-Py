@@ -88,3 +88,51 @@ Fecha,Notas,ID,Nombre del Elemento,Precio,Unidades,Precio Unitario,Costo U,Tipo,
 26/08,Test Trasnferencia,R1,Ropa y Neceseres Rango de precio 1,23.0,23,23.0,Sin stock,,Transferencia,529.0,529.0
 26/08,Test Resp,A2,Aritos Rango de precio 2,23.0,21,23.0,Sin stock,,Efectivo,483.0,483.0
 26/08,Test Resp,A2,Aritos Rango de precio 2,23.0,21,23.0,Sin stock,,Credito,483.0,483.0
+06/11/2025,25,Indumentaria,25,,1.0,1.0,0.99,1,Débito
+06/11/2025,asdasd,Produccion Propia,Otro,,0.79,21.0,6.87,11,Credito
+06/11/2025,Cliente: Carlos. Items: 3. 2 x1 $2.0; 2 x1 $2.0; Otro x11 $8.69. asdasd,Conjunto,Ticket Carlos,,12.69,0.0,12.69,1,Credito
+06/11/2025,1,Produccion Propia,Aritos,,1.0,1.0,0.99,1,Efectivo
+06/11/2025,1,Produccion Propia,Pulsera,,1.0,1.0,0.99,1,Efectivo
+06/11/2025,1,Indumentaria,222,,1.0,1.0,0.99,1,Efectivo
+06/11/2025,Cliente: Roman | Items: 4 | Detalle: Aritos x1 $1.0; Aritos x1 $1.0; Aritos x1 $1.0; Aritos x1 $1.0. 1,Conjunto,Ticket Roman,,4.0,0.0,4.0,1,Efectivo
+06/11/2025,Cliente: Mateo | Items: 2 | Detalle: Aritos x1 $1.0; Aritos x1 $1.0.,Conjunto,Ticket Mateo,,2.0,0.0,2.0,1,Efectivo
+06/11/2025,,Indumentaria,1,,1.0,1.0,0.99,1,Efectivo
+06/11/2025,Cliente: Carlos | Items: 2 | Detalle: 1 x1 $0.99 - 1; 2 x2 $3.92 - Cacatua dorada con esmalte de oro.,Conjunto,Ticket Carlos,,4.91,0.0,4.91,1,Efectivo
+06/11/2025,Cliente: Carlos | Items: 1 | Detalle: Aritos x5 $750.0 - Robertito.,Conjunto,Ticket Carlos,,750.0,0.0,750.0,1,Débito
+06/11/2025,Cliente: Carlos | Items: 2 | Detalle: Collar x1 $2.0 - cacacacacacaca; Pulsera x2 $3.92 - CACACACACACAC.,Conjunto,Ticket Carlos,,5.92,0.0,5.92,1,Débito
+07/11/2025,"Cliente: Carlos
+Items: 1
+Detalle: Mates x1 $1.0 - 1",Conjunto,Ticket Carlos,,1.0,0.0,1.0,1,Efectivo
+08/11/2025,"Cliente: 2
+Items: 1
+Detalle: Aros x2 $4.0 - 2",Conjunto,Ticket 2,,4.0,0.0,4.0,1,Efectivo
+08/11/2025,"Cliente: Carlos
+Items: 2
+Detalle: Mates x1 $1.0 - 1
+Detalle: Abanicos x2 $4.0 - 2",Conjunto,Ticket Carlos,,5.0,0.0,5.0,1,Efectivo
+07/11/2025,"Items: 1
+Detalle: Llaveros x2 $4.0 - 2
+2",Conjunto,Ticket Carlos,,4.0,0.0,4.0,1,Efectivo
+07/11/2025,"Items: 2
+Detalle: Llaveros x2 $4.0 - 2
+Detalle: Collares x1 $1.0 - 1",Conjunto,Ticket Carlos,,5.0,0.0,5.0,1,Efectivo
+07/11/2025,"Items: 1
+Detalle: Cintos x2 $4.0 - 2",Conjunto,Ticket Cliente 8,,4.0,0.0,4.0,1,Efectivo
+09/11/2025,"Items: 1
+Detalle: Pulseras x3 $9.0 - 3",Conjunto,Ticket Cliente 9,,9.0,0.0,9.0,1,Efectivo
+07/11/2025,"Items: 2
+Detalle: Llaveros x2 $4.0 - 2
+Detalle: Collares x1 $2.0 - 1
+2",Conjunto,Ticket Carlos,,6.0,0.0,6.0,1,Efectivo
+07/11/2025,"Items: 1
+Detalle: Escarapela x2 $4.0 - Lauro Damare",Conjunto,Ticket Lauro Damare,,4.0,0.0,4.0,1,Efectivo
+07/11/2025,"Items: 1
+Detalle: Collares x2 $2000.0 - 2",Conjunto,Ticket Cliente 10,,2000.0,0.0,2000.0,1,Efectivo
+07/11/2025,"Items: 1
+Detalle: Aritos x5 $25.0 - 5",Conjunto,Ticket Mateo,,25.0,0.0,25.0,1,Efectivo
+07/11/2025,"Items: 1
+Detalle: Escarapela x3 $9.0 - 3",Conjunto,Ticket 3,,9.0,0.0,9.0,1,Efectivo
+07/11/2025,"Items: 2
+Detalle: Escarapela x3 $9.0 - 3
+Detalle: Chaulata x3 $9.0 - 3
+3",Conjunto,Ticket 3,,18.0,0.0,18.0,1,Efectivo

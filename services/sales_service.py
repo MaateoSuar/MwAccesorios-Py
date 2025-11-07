@@ -16,10 +16,12 @@ DATA_DIR = Path("data")
 DATA_DIR.mkdir(exist_ok=True)
 SALES_FILE = DATA_DIR / "sales.json"
 HISTORY_FILE = DATA_DIR / "history.json"
+PRETICKETS_FILE = DATA_DIR / "pre_tickets.json"
 
 # Estructura en memoria
 _ventas = []  # lista de dicts: {fecha,categoria,tipo,fotografia,precio,unidades,total,pago,notas}
 _historial = {}  # dict por fecha ISO (YYYY-MM-DD) -> lista de ventas exportadas
+_pretickets = {}  # dict cliente -> lista de items de venta sin confirmar
 
 def _load_ventas():
     global _ventas
@@ -43,6 +45,17 @@ def _load_historial():
     except Exception as e:
         print(f"⚠️ No se pudo cargar history.json: {e}")
 
+def _load_pretickets():
+    global _pretickets
+    try:
+        if PRETICKETS_FILE.exists():
+            with open(PRETICKETS_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                if isinstance(data, dict):
+                    _pretickets = data
+    except Exception as e:
+        print(f"⚠️ No se pudo cargar pre_tickets.json: {e}")
+
 def _save_ventas():
     try:
         with open(SALES_FILE, 'w', encoding='utf-8') as f:
@@ -57,9 +70,17 @@ def _save_historial():
     except Exception as e:
         print(f"⚠️ No se pudo guardar history.json: {e}")
 
+def _save_pretickets():
+    try:
+        with open(PRETICKETS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(_pretickets, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"⚠️ No se pudo guardar pre_tickets.json: {e}")
+
 # Cargar ventas al iniciar
 _load_ventas()
 _load_historial()
+_load_pretickets()
 
 # Inicializar tabla en Postgres (append-only) si hay DB
 def _init_db_if_needed():
@@ -224,9 +245,139 @@ def listar_historial():
         return agrupado
     return dict(_historial)
 
+def listar_pretickets():
+    return dict(_pretickets)
+
+def agregar_item_preticket(cliente: str, data: dict):
+    if not cliente or not isinstance(cliente, str):
+        raise ValueError("Cliente inválido")
+    item = _normalizar_venta(data)
+    _pretickets.setdefault(cliente, [])
+    _pretickets[cliente].append(item)
+    _save_pretickets()
+    return len(_pretickets[cliente]) - 1
+
+def eliminar_item_preticket(cliente: str, index: int):
+    if cliente not in _pretickets:
+        raise KeyError("CLIENTE_NO_ENCONTRADO")
+    items = _pretickets.get(cliente, [])
+    if index < 0 or index >= len(items):
+        raise IndexError("INDICE_FUERA_DE_RANGO")
+    items.pop(index)
+    if not items:
+        _pretickets.pop(cliente, None)
+    _save_pretickets()
+    return True
+
+def limpiar_preticket(cliente: str):
+    if cliente in _pretickets:
+        _pretickets.pop(cliente, None)
+        _save_pretickets()
+    return True
+
+def actualizar_item_preticket(cliente: str, index: int, data: dict):
+    if cliente not in _pretickets:
+        raise KeyError("CLIENTE_NO_ENCONTRADO")
+    items = _pretickets.get(cliente, [])
+    if index < 0 or index >= len(items):
+        raise IndexError("INDICE_FUERA_DE_RANGO")
+    item = _normalizar_venta(data)
+    items[index] = item
+    _save_pretickets()
+    return dict(item)
+
+def confirmar_preticket_como_venta(cliente: str, payload: dict):
+    if cliente not in _pretickets or not _pretickets[cliente]:
+        raise ValueError("PRETICKET_VACIO")
+    items = _pretickets[cliente]
+    fecha_in = payload.get("fecha") or items[0].get("fecha")
+    pago_in = str(payload.get("pago", items[0].get("pago", "")) or "")
+    notas_extra = str(payload.get("notas", "") or "")
+    categoria = str(payload.get("categoria", "Conjunto") or "Conjunto")
+    tipo = str(payload.get("tipo", f"Ticket {cliente}") or f"Ticket {cliente}")
+    fotografia = str(payload.get("fotografia", "") or "")
+    total = 0.0
+    detalle = []
+    fotos = []
+    for it in items:
+        try:
+            pu = float(it.get("precio", 0.0))
+        except Exception:
+            pu = 0.0
+        try:
+            u = int(it.get("unidades", 0))
+        except Exception:
+            u = 0
+        subtotal = round(pu * u, 2)
+        total += subtotal
+        nombre_tipo = it.get("tipo") or it.get("nombre") or ""
+        foto_it = (it.get("fotografia") or "").strip()
+        if foto_it:
+            fotos.append(foto_it)
+        nota_item = (it.get("notas") or "").strip()
+        # Agregar nota del ítem si existe
+        if nota_item:
+            detalle.append(f"{nombre_tipo} x{u} ${subtotal} - {nota_item}")
+        else:
+            detalle.append(f"{nombre_tipo} x{u} ${subtotal}")
+    # Notas multilínea, cada ítem en un renglón con prefijo 'Detalle:'
+    detalle_multilinea = []
+    for d in detalle:
+        detalle_multilinea.append(f"Detalle: {d}")
+    notas_partes = [
+        f"Items: {len(items)}",
+        *detalle_multilinea
+    ]
+    if notas_extra:
+        notas_partes.append(str(notas_extra))
+    notas = "\n".join(notas_partes)
+    # Tomar referencias para edición futura (ej: precargar formulario)
+    categoria_edit = (items[0].get("categoria") or "") if items else ""
+    tipo_edit = (items[0].get("tipo") or items[0].get("nombre") or "") if items else ""
+
+    venta_agrupada = {
+        "fecha": fecha_in,
+        "categoria": categoria,
+        "tipo": tipo,
+        "fotografia": fotografia,
+        "fotos": fotos,
+        "detalle": detalle,
+        "precio": float(round(total, 2)),
+        "unidades": 1,
+        "pago": pago_in,
+        "notas": notas,
+        "items_count": len(items),
+        # Campos auxiliares para edición posterior
+        "categoria_edit": categoria_edit,
+        "tipo_edit": tipo_edit,
+        # Cliente y items originales para reabrir en modo pre-ticket
+        "cliente": cliente,
+        "items_raw": list(items),
+    }
+    # Si no se pasó fotografia explícita, usar la primera disponible de los ítems
+    if not venta_agrupada.get("fotografia") and fotos:
+        venta_agrupada["fotografia"] = fotos[0]
+    # Decidir comportamiento según update_index (viene cuando se reabre desde el registro)
+    upd_in = payload.get("update_index")
+    try:
+        upd_index = int(upd_in) if upd_in is not None else None
+    except Exception:
+        upd_index = None
+    if upd_index is not None and 0 <= upd_index < len(_ventas):
+        actualizar_venta(upd_index, venta_agrupada)
+    else:
+        agregar_venta(venta_agrupada)
+    _pretickets.pop(cliente, None)
+    _save_pretickets()
+    return dict(venta_agrupada)
+
 def agregar_venta(data: dict):
     """Agrega una venta SOLO a la memoria local, NO a Google Sheets automáticamente"""
     venta = _normalizar_venta(data)
+    # Conservar metadatos opcionales (no usados en cálculos) si vienen presentes
+    for k in ("items_count", "detalle", "fotos", "categoria_edit", "tipo_edit", "cliente", "items_raw"):
+        if k in data:
+            venta[k] = data[k]
     _ventas.append(venta)
     print(f"✅ Venta agregada a la memoria local (índice: {len(_ventas) - 1})")
     print(f"   NOTA: La venta NO se exportó a Google Sheets. Usa 'Exportar a Google Sheets' cuando estés listo.")
@@ -236,8 +387,24 @@ def actualizar_venta(index: int, data: dict):
     if index < 0 or index >= len(_ventas):
         raise IndexError("Índice fuera de rango")
     venta = _normalizar_venta(data)
+    # Conservar metadatos opcionales (no usados en cálculos) si vienen presentes
+    for k in ("items_count", "detalle", "fotos", "categoria_edit", "tipo_edit", "cliente", "items_raw"):
+        if k in data:
+            venta[k] = data[k]
     _ventas[index] = venta
     _save_ventas()
+
+def reabrir_venta_como_preticket(index: int):
+    if index < 0 or index >= len(_ventas):
+        raise IndexError("Índice fuera de rango")
+    venta = _ventas[index]
+    cliente = (venta.get("cliente") or "").strip()
+    items_raw = venta.get("items_raw") or []
+    if not cliente or not isinstance(items_raw, list) or len(items_raw) == 0:
+        raise ValueError("SIN_ITEMS_ORIGINALES")
+    _pretickets[cliente] = list(items_raw)
+    _save_pretickets()
+    return {"cliente": cliente, "items": list(items_raw)}
 
 def eliminar_venta(index: int):
     if index < 0 or index >= len(_ventas):

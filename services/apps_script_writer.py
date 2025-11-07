@@ -55,9 +55,21 @@ class AppsScriptWriter:
 
         fecha_obj = datetime.fromisoformat(str(venta["fecha"]))
         
-        # Obtener categoría y link de foto
+        # Obtener categoría y link(s) de foto
         categoria = venta.get("categoria", "General")
-        link_foto = venta.get("link_foto", venta.get("fotografia", ""))
+        fotos = []
+        try:
+            if isinstance(venta.get("fotos"), list):
+                fotos = [str(u).strip() for u in venta.get("fotos") if str(u).strip()]
+        except Exception:
+            fotos = []
+        # Fallback a una sola fotografia si no hay lista
+        if not fotos:
+            single = venta.get("link_foto", venta.get("fotografia", ""))
+            if single:
+                fotos = [single]
+        # Unir múltiples links en un solo campo (una línea por link)
+        link_foto = "\n".join(fotos)
         
         fila = [
             fecha_obj.strftime("%d/%m/%Y"),          # A: Fecha
