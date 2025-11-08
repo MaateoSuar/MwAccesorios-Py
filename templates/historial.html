@@ -92,6 +92,31 @@
                         <i class="fas fa-plus mr-2"></i> Registrar nuevas ventas
                     </a>
                 </div>
+                <div class="mb-4 grid grid-cols-1 md:grid-cols-12 gap-2 md:gap-3 items-end">
+                    <div class="md:col-span-3">
+                        <label for="giftCodePrefix" class="block text-xs font-medium text-gray-700 mb-1">Tipo de código</label>
+                        <div class="relative">
+                            <span class="absolute inset-y-0 left-2 flex items-center text-gray-500"><i class="fas fa-magnifying-glass"></i></span>
+                            <select id="giftCodePrefix" class="w-full pl-8 pr-3 py-2 border rounded-md text-sm focus:outline-none input-focus">
+                                <option value="" disabled selected>Selecciona el código</option>
+                                <option value="RAP">RAP</option>
+                                <option value="RAV">RAV</option>
+                                <option value="RCM">RCM</option>
+                                <option value="RI">RI</option>
+                                <option value="RLM">RLM</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="md:col-span-5">
+                        <label for="giftCodeNumber" class="block text-xs font-medium text-gray-700 mb-1">Número de regalo</label>
+                        <input id="giftCodeNumber" type="text" inputmode="numeric" pattern="[0-9]*" class="w-full px-3 py-2 border rounded-md text-sm focus:outline-none input-focus" placeholder="Ej: 1234" />
+                    </div>
+                    <div class="md:col-span-2 flex gap-2">
+                        <button id="giftSearchBtn" type="button" class="flex-1 btn-primary rounded-md px-3 py-2 text-sm font-medium btn-hover btn-active"><i class="fas fa-search mr-2"></i>Buscar</button>
+                        <button id="giftClearBtn" type="button" class="flex-1 bg-gray-100 rounded-md px-3 py-2 text-sm font-medium hover:bg-gray-200"><i class="fas fa-eraser mr-2"></i>Limpiar</button>
+                    </div>
+                    <div class="md:col-span-2 text-xs text-gray-600">Filtra solo regalos por código y número</div>
+                </div>
 
                 <div id="historyContainer" class="space-y-3"></div>
             </div>
@@ -478,11 +503,11 @@
                                                     ${fotos.length > 1 ? `<span class=\\\"absolute -bottom-1 -right-1 text-[10px] bg-gray-900 text-white rounded-full px-1\\\">${fotos.length}</span>` : ''}
                                                 </button>` : '-';
                                             return `
-                                            <tr data-index="${i}" data-id="${v.id ?? ''}" data-total="${rowTotal}" data-pago="${(v.pago || '').replace(/"/g,'&quot;')}">
+                                            <tr data-index="${i}" data-id="${v.id ?? ''}" data-total="${rowTotal}" data-pago="${(v.pago || '').replace(/"/g,'&quot;')}" data-codigo-regalo="${(v.codigo_regalo || '').replace(/"/g,'&quot;')}" data-es-regalo="${String(!!v.es_regalo)}">
                                                 <td class="px-3 md:px-6 py-3 whitespace-nowrap text-xs md:text-sm text-gray-700 text-center">${formatearFechaDisplay(v.fecha) || ''}</td>
                                                 <td class="px-3 md:px-6 py-3 whitespace-nowrap text-xs md:text-sm text-gray-700 text-center">${photoBtn}</td>
                                                 <td class="px-3 md:px-6 py-3 whitespace-nowrap text-xs md:text-sm font-medium text-gray-900 text-center">${v.categoria || '-'}</td>
-                                                <td class="px-3 md:px-6 py-3 whitespace-nowrap text-xs md:text-sm text-gray-700 text-center">${v.tipo || '-'}</td>
+                                                <td class="px-3 md:px-6 py-3 whitespace-nowrap text-xs md:text-sm text-gray-700 text-center">${v.tipo || '-'} ${(v.codigo_regalo ? `<span class=\"ml-1 inline-block text-[10px] px-1.5 py-0.5 rounded bg-yellow-50 text-yellow-800 font-semibold border border-yellow-200\" data-gift-code-badge data-gift-code-text=\"${(v.codigo_regalo || '').replace(/"/g,'&quot;')}\">${(v.codigo_regalo || '').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</span>` : '')}</td>
                                                 <td class="px-3 md:px-6 py-3 text-xs md:text-sm text-gray-700 whitespace-pre-wrap break-words text-center" title="${v.notas || ''}">${v.notas || '-'}</td>
                                                 <td class="px-3 md:px-6 py-3 whitespace-nowrap text-xs md:text-sm text-gray-700 text-center">${(v.items_count || 1)}</td>
                                                 <td class="px-3 md:px-6 py-3 whitespace-nowrap text-xs md:text-sm text-gray-700 text-center">$${Number(v.precio).toFixed(2)}</td>
@@ -635,6 +660,113 @@
             const url = btn.getAttribute('data-photo-url');
             if (url) abrirModalImagen(url);
         });
+
+        // Filtro de regalos por código y número
+        const prefixEl = document.getElementById('giftCodePrefix');
+        const numberEl = document.getElementById('giftCodeNumber');
+        const searchBtn = document.getElementById('giftSearchBtn');
+        const clearBtn = document.getElementById('giftClearBtn');
+
+        function aplicarFiltroRegalos() {
+            const pref = (prefixEl?.value || '').toUpperCase().trim();
+            const num = (numberEl?.value || '').replace(/\D/g, '').trim();
+            const rows = container.querySelectorAll('tbody tr');
+            rows.forEach(row => {
+                const esReg = (row.getAttribute('data-es-regalo') || 'false') === 'true' || (row.getAttribute('data-codigo-regalo') || '') !== '';
+                const code = (row.getAttribute('data-codigo-regalo') || '').toUpperCase();
+                const digits = code.replace(/\D/g, '');
+                let visible = true;
+                if (!esReg) visible = false;
+                if (visible && pref) visible = code.startsWith(pref);
+                if (visible && num) visible = digits.includes(num);
+                row.classList.toggle('hidden', !visible);
+                // Resetear y resaltar badge
+                const badge = row.querySelector('[data-gift-code-badge]');
+                if (badge) {
+                    const original = row.getAttribute('data-codigo-regalo') || '';
+                    badge.classList.toggle('bg-yellow-100', false);
+                    badge.classList.toggle('border-yellow-300', false);
+                    // Reconstruir innerHTML con resaltado
+                    const codeStr = String(original);
+                    let html = codeStr.replace(/</g,'&lt;').replace(/>/g,'&gt;');
+                    const m = codeStr.match(/^([A-Za-z]+)(\d+)/);
+                    if (visible && codeStr) {
+                        if (m) {
+                            let [, letters, nums] = m;
+                            let lettersHTML = letters;
+                            let numsHTML = nums;
+                            if (pref && letters.toUpperCase().startsWith(pref)) {
+                                lettersHTML = `<span class=\"bg-yellow-200 rounded px-0.5\">${letters.slice(0, pref.length)}</span>` + letters.slice(pref.length);
+                            }
+                            if (num && nums.includes(num)) {
+                                const idx = nums.indexOf(num);
+                                numsHTML = nums.slice(0, idx) + `<span class=\"bg-yellow-200 rounded px-0.5\">${num}</span>` + nums.slice(idx + num.length);
+                            }
+                            html = `${lettersHTML}${numsHTML}`;
+                        } else if (pref && codeStr.toUpperCase().startsWith(pref)) {
+                            html = `<span class=\"bg-yellow-200 rounded px-0.5\">${codeStr.slice(0, pref.length)}</span>` + codeStr.slice(pref.length);
+                        }
+                    }
+                    badge.innerHTML = html;
+                    if (visible && (pref || num)) {
+                        badge.classList.add('bg-yellow-100');
+                        badge.classList.add('border-yellow-300');
+                    }
+                }
+            });
+            // Ocultar grupos de días sin filas visibles y expandir los que tengan coincidencias
+            container.querySelectorAll('[data-content]').forEach(content => {
+                const anyVisible = !!content.querySelector('tbody tr:not(.hidden)');
+                const wrapper = content.closest('.border');
+                if (wrapper) wrapper.classList.toggle('hidden', !anyVisible);
+                if (anyVisible) {
+                    // Expandir el grupo del día
+                    content.classList.remove('hidden');
+                    const arrow = wrapper?.querySelector('[data-arrow]');
+                    if (arrow) {
+                        arrow.classList.remove('fa-chevron-right');
+                        arrow.classList.add('fa-chevron-down');
+                    }
+                    // Expandir el mes correspondiente
+                    const monthSection = wrapper?.closest('[data-month-section]');
+                    if (monthSection) {
+                        const monthContent = monthSection.querySelector('[data-month-content]');
+                        const monthArrow = monthSection.querySelector('[data-month-arrow]');
+                        if (monthContent) monthContent.classList.remove('hidden');
+                        if (monthArrow) {
+                            monthArrow.classList.remove('fa-chevron-right');
+                            monthArrow.classList.add('fa-chevron-down');
+                        }
+                    }
+                }
+            });
+            // Scroll al primer resultado visible
+            const first = container.querySelector('tbody tr:not(.hidden)');
+            if (first) {
+                first.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }
+
+        function limpiarFiltroRegalos() {
+            if (prefixEl) prefixEl.value = '';
+            if (numberEl) numberEl.value = '';
+            container.querySelectorAll('tbody tr').forEach(row => row.classList.remove('hidden'));
+            container.querySelectorAll('[data-content]').forEach(content => {
+                const wrapper = content.closest('.border');
+                if (wrapper) wrapper.classList.remove('hidden');
+            });
+            // Limpiar resaltado
+            container.querySelectorAll('[data-gift-code-badge]').forEach(badge => {
+                const tr = badge.closest('tr');
+                const original = tr?.getAttribute('data-codigo-regalo') || '';
+                badge.textContent = original;
+                badge.classList.remove('bg-yellow-100', 'border-yellow-300');
+            });
+        }
+
+        searchBtn?.addEventListener('click', aplicarFiltroRegalos);
+        clearBtn?.addEventListener('click', limpiarFiltroRegalos);
+        numberEl?.addEventListener('keydown', (e) => { if (e.key === 'Enter') aplicarFiltroRegalos(); });
     });
     </script>
     </body>
