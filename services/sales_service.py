@@ -100,9 +100,22 @@ def _init_db_if_needed():
             precio_final NUMERIC(12,2) NOT NULL,
             unidades INT NOT NULL,
             pago TEXT,
+            codigo_regalo TEXT,
+            es_regalo BOOLEAN NOT NULL DEFAULT FALSE,
             created_at TIMESTAMPTZ NOT NULL DEFAULT now()
         );
         CREATE INDEX IF NOT EXISTS ventas_historial_created_at_idx ON ventas_historial (created_at DESC);
+        -- Asegurar columnas nuevas si la tabla ya existía sin ellas
+        DO $$ BEGIN
+            BEGIN
+                ALTER TABLE ventas_historial ADD COLUMN IF NOT EXISTS codigo_regalo TEXT;
+            EXCEPTION WHEN others THEN NULL;
+            END;
+            BEGIN
+                ALTER TABLE ventas_historial ADD COLUMN IF NOT EXISTS es_regalo BOOLEAN NOT NULL DEFAULT FALSE;
+            EXCEPTION WHEN others THEN NULL;
+            END;
+        END $$;
         """
     )
 
@@ -227,7 +240,8 @@ def listar_historial():
         rows = fetchall(
             """
             SELECT id, fecha, notas, categoria, tipo, fotografia,
-                   precio_base, descuento, precio_final, unidades, pago, created_at
+                   precio_base, descuento, precio_final, unidades, pago,
+                   codigo_regalo, es_regalo, created_at
             FROM ventas_historial
             ORDER BY created_at DESC
             LIMIT 1000
@@ -250,6 +264,8 @@ def listar_historial():
                 "total": float((r.get("precio_final") or 0) * (r.get("unidades") or 0)),
                 "pago": r.get("pago") or "",
                 "notas": r.get("notas") or "",
+                "codigo_regalo": r.get("codigo_regalo") or "",
+                "es_regalo": bool(r.get("es_regalo")) if r.get("es_regalo") is not None else False,
             }
             agrupado.setdefault(fecha_key, []).append(venta)
         return agrupado
@@ -475,9 +491,11 @@ def exportar_ventas_a_historial():
                     """
                     INSERT INTO ventas_historial (
                         fecha, notas, categoria, tipo, fotografia,
-                        precio_base, descuento, precio_final, unidades, pago
+                        precio_base, descuento, precio_final, unidades, pago,
+                        codigo_regalo, es_regalo
                     ) VALUES (
-                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                        %s, %s
                     )
                     """,
                     (
@@ -491,6 +509,8 @@ def exportar_ventas_a_historial():
                         float(v.get("precio_final", v.get("precio", 0.0))),
                         int(v.get("unidades", 0)),
                         v.get("pago"),
+                        v.get("codigo_regalo"),
+                        bool(v.get("es_regalo"))
                     )
                 )
 
